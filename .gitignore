@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+COPILOT_PROVIDER_API_KEY=*.txt
+node_modules/
+coverage/
+*.log
+.DS_Store
+.demo-data/
+test-results/
+playwright-report/

@@ -1,0 +1,32 @@
+{
+  "name": "csi-lucky-draw",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Reusable employee engagement and lucky draw portal",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "demo": "node scripts/demo.js",
+    "test": "node --test --test-concurrency=1",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "connect-pg-simple": "^10.0.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "express-session": "^1.18.1",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.0",
+    "@eslint/js": "^9.28.0",
+    "eslint": "^9.28.0",
+    "globals": "^16.2.0",
+    "playwright": "^1.56.0",
+    "supertest": "^7.1.1"
+  }
+}
