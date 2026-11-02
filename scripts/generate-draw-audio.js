@@ -24,22 +24,38 @@ const noise = () => {
   seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
   return seed / 2147483648 - 1;
 };
-const drum = new Float32Array(rate * 10);
-for (let hit = 0; hit < 10; hit += .12 - .075 * (hit / 10)) {
+const drum = new Float32Array(rate * 9);
+for (let hit = 0; hit < 9; hit += .17 - .13 * (hit / 9)) {
   for (let i = Math.floor(hit * rate); i < Math.min(drum.length, (hit + .13) * rate); i++) {
     const age = i / rate - hit;
-    drum[i] += (noise() * .8 + Math.sin(age * Math.PI * 2 * 170) * .5) * Math.exp(-age * 32);
+    const intensity = .2 + .65 * (hit / 9);
+    drum[i] += (noise() * .8 + Math.sin(age * Math.PI * 2 * 170) * .5) * Math.exp(-age * 32) * intensity;
   }
 }
+for (let i = 0; i < drum.length; i++) {
+  const time = i / rate;
+  const rise = time / 9;
+  drum[i] += Math.sin(2 * Math.PI * (65 * time + 8 * time * time)) * .08 * rise * rise;
+}
 const fanfare = new Float32Array(rate * 2);
-[523.25, 659.25, 783.99, 1046.5].forEach((frequency, index) => {
-  for (let i = Math.floor(index * .16 * rate); i < fanfare.length; i++) {
-    const age = i / rate - index * .16;
-    fanfare[i] += Math.sin(age * Math.PI * 2 * frequency) * .28 * Math.min(1, age * 100) * Math.exp(-age * 3);
+for (const [start, frequencies, strength] of [
+  [0, [392, 493.88, 587.33], .16],
+  [.22, [523.25, 659.25, 783.99, 1046.5], .2],
+]) {
+  for (let i = Math.floor(start * rate); i < fanfare.length; i++) {
+    const age = i / rate - start;
+    for (const frequency of frequencies) {
+      const brass = Math.sin(age * Math.PI * 2 * frequency) + .25 * Math.sin(age * Math.PI * 4 * frequency);
+      fanfare[i] += brass * strength * Math.min(1, age * 90) * Math.exp(-age * 2.8);
+    }
   }
-});
+}
+for (let i = 0; i < fanfare.length; i++) {
+  const time = i / rate;
+  if (time >= .22) fanfare[i] += noise() * .2 * Math.exp(-(time - .22) * 5);
+}
 const destination = new URL('../public/audio/', import.meta.url);
 await mkdir(destination, { recursive: true });
 await writeFile(new URL('drumroll.wav', destination), wav(drum));
 await writeFile(new URL('winner.wav', destination), wav(fanfare));
-console.log('Generated original 10-second drumroll and 2-second winner fanfare.');
+console.log('Generated original 9-second crescendo and 2-second ta-da fanfare.');

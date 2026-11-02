@@ -9,19 +9,22 @@ let h;
 before(async () => { h = await harness(); });
 after(async () => { await h?.pool.end(); });
 
-test('native draw recordings are served as audible PCM WAV with exact ten-second drumroll', async () => {
-  for (const [file, seconds] of [['drumroll', 10], ['winner', 2]]) {
+test('native draw recordings have a nine-second crescendo and audible ta-da fanfare', async () => {
+  for (const [file, seconds] of [['drumroll', 9], ['winner', 2]]) {
     const response = await request(h.app).get(`/audio/${file}.wav`).expect(200);
     const buffer = response.body;
     assert.ok(response.headers['content-type'].includes('audio/'));
     assert.equal(buffer.toString('ascii', 0, 4), 'RIFF');
     const rate = buffer.readUInt32LE(24);
     assert.equal(buffer.readUInt32LE(40) / (rate * 2), seconds);
+    const levels = [];
     for (let second = 0; second < seconds; second++) {
       let sum = 0;
       for (let i = second * rate; i < (second + 1) * rate; i++) sum += (buffer.readInt16LE(44 + i * 2) / 32767) ** 2;
       assert.ok(Math.sqrt(sum / rate) > .005, `${file} has sound during second ${second}`);
+      levels.push(Math.sqrt(sum / rate));
     }
+    if (file === 'drumroll') assert.ok(levels[8] > levels[0] * 3, 'Crescendo must build measurably');
   }
 });
 

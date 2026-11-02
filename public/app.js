@@ -11,8 +11,8 @@ let connectionLost = false;
 let presentation = false;
 let roundPage = 0;
 const initializedCelebrations = new WeakSet();
-const drumAudio = new Audio('/audio/drumroll.wav');
-const winnerAudio = new Audio('/audio/winner.wav');
+const drumAudio = new Audio('/audio/drumroll.wav?v=crescendo');
+const winnerAudio = new Audio('/audio/winner.wav?v=crescendo');
 const drawAudio = [drumAudio, winnerAudio];
 drawAudio.forEach(audio => { audio.preload = 'auto'; audio.volume = .9; });
 let audioUnlocked = false;
@@ -75,7 +75,7 @@ function startDrumroll(draw) {
   const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
   if (drumKey === key) return;
   stopDrumroll();
-  const duration = state.data.reveal_duration_ms / 1000;
+  const duration = state.data.reveal_duration_ms / 1000 - 1;
   const elapsed = Math.max(0, (serverNow() - draw.reveal_starts_at) / 1000);
   if (elapsed >= duration) return;
   drumAudio.currentTime = elapsed;
@@ -94,16 +94,17 @@ function updateDrawSound() {
   const draw = state.data.draws.find(d => d.id === state.data.current_draw_id);
   if (!draw) { stopDrumroll(); return; }
   const now = serverNow();
-  if (revealing(draw) && now >= draw.reveal_starts_at && now < draw.reveal_ends_at) {
+  const celebrationAt = draw.reveal_ends_at - 1000;
+  if (revealing(draw) && now >= draw.reveal_starts_at && now < celebrationAt) {
     startDrumroll(draw);
     return;
   }
   stopDrumroll();
-  if (draw.status === 'claimed' && draw.name && now >= draw.reveal_ends_at && now - draw.reveal_ends_at < 3000) {
+  if (draw.status === 'claimed' && now >= celebrationAt && now - celebrationAt < 2000) {
     const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
     if (soundedWinners.has(key)) return;
     soundedWinners.add(key);
-    winnerAudio.currentTime = 0;
+    winnerAudio.currentTime = Math.max(0, (now - celebrationAt) / 1000);
     winnerAudio.play().then(() => setSoundStatus('Playing winner fanfare.')).catch(audioFailure);
   }
 }
@@ -234,9 +235,10 @@ function stage() {
   const { event, draws, remaining, batch } = state.data;
   const visible = draws.find(d => d.id === state.data.current_draw_id) || draws[0];
   const rolling = revealing(visible);
-  const celebrate = visible?.status === 'claimed' && !rolling && visible.reveal_ends_at > 0 &&
-    serverNow() >= visible.reveal_ends_at && serverNow() - visible.reveal_ends_at < 5000;
-  return `<div class="draw-stage" id="draw-stage">${celebrate ? `<div class="confetti-burst" data-celebration="${visible.reveal_ends_at}" aria-hidden="true">${'<i></i>'.repeat(60)}</div>` : ''}<p class="eyebrow">${escape(event.title)}</p>
+  const celebrationAt = visible?.reveal_ends_at - 1000;
+  const celebrate = visible?.status === 'claimed' && visible.reveal_ends_at > 0 &&
+    serverNow() >= celebrationAt && serverNow() - celebrationAt < 5000;
+  return `<div class="draw-stage" id="draw-stage">${celebrate ? confetti(celebrationAt) : ''}<p class="eyebrow">${escape(event.title)}</p>
     ${batch ? `<p class="batch-progress">Winner ${batch.current_position} of ${batch.winner_count}${batch.requested_count > batch.winner_count ? ` &middot; ${batch.requested_count} requested; ${batch.winner_count} available` : ''}</p>` : ''}
     ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
       <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
@@ -249,6 +251,10 @@ function stage() {
       `<div class="orb" aria-hidden="true">&#10022;</div><h2>${event.status === 'ended' ? 'A celebration to remember.' : 'Your moment is coming.'}</h2><p>${event.status === 'live' ? 'The draw is live. Good luck, everyone!' : 'Grab a seat. The next lucky name could be yours.'}</p>`}
     <p class="helper">${remaining} prize${remaining === 1 ? '' : 's'} remaining &middot; ${state.data.stats.tickets} eligible tickets</p>
   </div>`;
+}
+
+function confetti(timestamp) {
+  return `<div class="confetti-burst" data-celebration="${timestamp}" aria-hidden="true">${'<i></i>'.repeat(60)}</div>`;
 }
 
 function drawHelp() {
@@ -533,6 +539,12 @@ async function initialize() {
 
 setInterval(() => {
   updateDrawSound();
+  const activeReveal = $('[data-reveal]');
+  const activeDraw = state.data?.draws.find(draw => String(draw.id) === activeReveal?.dataset.reveal);
+  if (activeDraw && activeDraw.status === 'claimed' && serverNow() >= activeDraw.reveal_ends_at - 1000 &&
+      serverNow() < activeDraw.reveal_ends_at + 4000 && !$('#draw-stage .confetti-burst')) {
+    $('#draw-stage').insertAdjacentHTML('afterbegin', confetti(activeDraw.reveal_ends_at - 1000));
+  }
   document.querySelectorAll('[data-celebration]').forEach(layer => {
     if (initializedCelebrations.has(layer)) return;
     initializedCelebrations.add(layer);
@@ -555,7 +567,7 @@ setInterval(() => {
     digit.classList.toggle('settled', settled);
   });
   $('#reveal-progress').style.width = `${Math.min(100, elapsed / duration * 100)}%`;
-  const message = elapsed < 3000 ? 'Rolling the ticket numbers...' : elapsed < duration ? 'Revealing your lucky ticket...' : 'Ticket revealed. Waiting for the selected name...';
+  const message = elapsed < 3000 ? 'Rolling the ticket numbers...' : elapsed < duration - 1000 ? 'Revealing your lucky ticket...' : 'Your lucky ticket! Get ready to meet the winner...';
   if ($('#reveal-message').textContent !== message) $('#reveal-message').textContent = message;
 }, 100);
 

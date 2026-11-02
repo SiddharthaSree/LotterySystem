@@ -13,7 +13,7 @@ function monitorAudio() {
     window.audioTracks.push(audio);
     audio.addEventListener('playing', () => {
       if (!audio.volume) return;
-      if (audio.src.endsWith('drumroll.wav')) {
+      if (new URL(audio.src).pathname.endsWith('drumroll.wav')) {
         window.drumrolls.push({ duration: audio.duration, offset: audio.currentTime, running: !audio.paused });
       } else window.playedNotes.push(1046.5);
     });
@@ -75,7 +75,7 @@ test('browser: plan rounds then roll from public page as admin while audience on
     for (const screen of [admin, audience]) {
       await screen.waitForFunction(() => window.drumrolls.length === 1);
       const drum = await screen.evaluate(() => window.drumrolls[0]);
-      assert.equal(drum.duration, 10);
+      assert.equal(drum.duration, 9);
       assert.equal(drum.running, true);
       assert.ok(drum.offset >= 0 && drum.offset < 3);
       await screen.evaluate(async () => {
@@ -92,6 +92,10 @@ test('browser: plan rounds then roll from public page as admin while audience on
         return samples.some(value => Math.abs(value) > .02);
       });
     }
+    await audience.waitForFunction(() => document.querySelectorAll('.reel-digit.settled').length === 6 &&
+      Boolean(document.querySelector('.confetti-burst')) && window.playedNotes.length > 0);
+    assert.equal(await audience.locator('#draw-stage .winner-reveal').count(), 0);
+    assert.equal(await audience.locator('#winners-list .winner-item').count(), 0);
     await audience.locator('#draw-stage .winner-reveal').waitFor();
     await audience.locator('.confetti-burst').waitFor({ state: 'attached' });
     await admin.locator('.confetti-burst').waitFor({ state: 'attached' });
@@ -146,7 +150,7 @@ test('native audio tolerates slow loading and reports blocked playback with clic
     await h.write('patch', '/admin/events/1', { ...h.settings, status: 'live' }).expect(200);
     browser = await chromium.launch();
     const page = await browser.newPage();
-    await page.route('**/audio/*.wav', async route => {
+    await page.route('**/audio/*.wav*', async route => {
       await new Promise(resolve => setTimeout(resolve, 700));
       await route.continue();
     });
