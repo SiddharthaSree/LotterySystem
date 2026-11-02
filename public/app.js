@@ -12,6 +12,53 @@ let presentation = false;
 let winnerPage = 0;
 let roundPage = 0;
 const initializedCelebrations = new WeakSet();
+let audioContext;
+let audioVolume;
+let soundEnabled = false;
+let lastRollSound = 0;
+const soundedWinners = new Set();
+
+function soundButton() {
+  return `<button class="secondary" type="button" data-action="sound" aria-pressed="${soundEnabled}">${soundEnabled ? 'Mute sound' : 'Enable sound'}</button>`;
+}
+
+function tone(frequency, delay = 0, duration = .12, volume = .15) {
+  const oscillator = audioContext.createOscillator();
+  const envelope = audioContext.createGain();
+  const start = audioContext.currentTime + delay;
+  oscillator.type = 'triangle';
+  oscillator.frequency.value = frequency;
+  envelope.gain.setValueAtTime(0, start);
+  envelope.gain.linearRampToValueAtTime(volume, start + .01);
+  envelope.gain.exponentialRampToValueAtTime(.001, start + duration);
+  oscillator.connect(envelope);
+  envelope.connect(audioVolume);
+  oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
+  oscillator.start(start);
+  oscillator.stop(start + duration + .02);
+}
+
+function updateDrawSound() {
+  if (!audioVolume) return;
+  const onDraw = route() === 'draw' || (route() === 'admin' && state.tab === 'draw');
+  audioVolume.gain.value = soundEnabled && onDraw ? .4 : 0;
+  if (!soundEnabled || !onDraw || audioContext.state !== 'running' || !state.data) return;
+  const draw = state.data.draws.find(d => d.id === state.data.current_draw_id);
+  if (!draw) return;
+  const now = serverNow();
+  if (revealing(draw) && now >= draw.reveal_starts_at && now < draw.reveal_ends_at) {
+    if (performance.now() - lastRollSound > 180) {
+      tone(180 + Math.floor(Math.random() * 5) * 55, 0, .05, .1);
+      lastRollSound = performance.now();
+    }
+  } else if (draw.status === 'claimed' && draw.name && now >= draw.reveal_ends_at && now - draw.reveal_ends_at < 3000) {
+    const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
+    if (soundedWinners.has(key)) return;
+    soundedWinners.add(key);
+    [523.25, 659.25, 783.99, 1046.5].forEach((note, i) => tone(note, i * .14, .35));
+    [523.25, 659.25, 783.99].forEach(note => tone(note, .65, .6, .08));
+  }
+}
 
 async function api(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -164,7 +211,7 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : resetDemoButton()}
+  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${soundButton()}${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${soundButton()}${resetDemoButton()}</div>`}
     <div class="draw-layout"><div class="draw-main">${stage()}
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
@@ -347,6 +394,28 @@ document.addEventListener('click', event => {
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
   else if (button.dataset.winnerPage) { winnerPage += Number(button.dataset.winnerPage); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
+  else if (button.dataset.action === 'sound') action(async () => {
+    if (soundEnabled) {
+      soundEnabled = false;
+      audioVolume.gain.value = 0;
+    } else {
+      if (!window.AudioContext) throw new Error('Sound is unavailable in this browser. Try a current version of Chrome or Edge.');
+      if (!audioContext) {
+        audioContext = new AudioContext();
+        audioVolume = audioContext.createGain();
+        audioVolume.gain.value = 0;
+        audioVolume.connect(audioContext.destination);
+      }
+      await audioContext.resume();
+      if (audioContext.state !== 'running') throw new Error('Audio is blocked. Allow sound for this site and try again.');
+      soundEnabled = true;
+      audioVolume.gain.value = .4;
+      tone(659.25, 0, .15);
+      tone(783.99, .15, .2);
+      toast('Sound enabled for this tab. Use only one speaker tab to avoid echoes.');
+    }
+    render();
+  });
   else if (button.dataset.action === 'reset-demo') action(async () => {
     if (!confirm('Reset this demo? Its winners and round progress will be cleared. Employees, tickets, and round settings stay unchanged. Real events are not affected.')) return;
     await api(adminPath('/reset-demo'), 'POST', { confirm: true });
@@ -437,6 +506,7 @@ async function initialize() {
 }
 
 setInterval(() => {
+  updateDrawSound();
   document.querySelectorAll('[data-celebration]').forEach(layer => {
     if (initializedCelebrations.has(layer)) return;
     initializedCelebrations.add(layer);

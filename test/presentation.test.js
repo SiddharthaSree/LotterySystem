@@ -41,7 +41,7 @@ test('presentation fits projector and laptop screens with paginated winners and 
       assert.equal(await page.locator('.presentation-logo').evaluate(image => image.complete && image.naturalWidth > 0), true);
       const measurements = await page.evaluate(() => {
         const app = document.querySelector('#app');
-        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages', '[data-action="reset-demo"]'];
+        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages', '[data-action="reset-demo"]', '[data-action="sound"]'];
         return {
           noScroll: app.scrollHeight <= app.clientHeight + 1 && app.scrollWidth <= app.clientWidth + 1,
           visible: targets.every(selector => {

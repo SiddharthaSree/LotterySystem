@@ -37,20 +37,39 @@ test('browser: plan rounds then roll from public page as admin while audience on
     assert.equal(await admin.getByLabel('Number of winners', { exact: true }).count(), 0);
     const audienceContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
     const audience = await audienceContext.newPage();
+    await audience.addInitScript(() => {
+      window.playedNotes = [];
+      const create = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function () {
+        const oscillator = create.call(this);
+        const start = oscillator.start.bind(oscillator);
+        oscillator.start = (...args) => { window.playedNotes.push(oscillator.frequency.value); start(...args); };
+        return oscillator;
+      };
+    });
     audience.on('pageerror', e => errors.push(e.message));
     await audience.goto(`${base}/?event=1#draw`);
     await audience.getByText('Waiting for the coordinator to roll.', { exact: false }).waitFor();
     assert.equal(await audience.locator('[data-roll-round]').count(), 0);
     assert.equal(await audience.getByRole('button', { name: 'Reset demo' }).count(), 0);
+    assert.equal(await audience.evaluate(() => window.playedNotes.length), 0);
+    await audience.getByRole('button', { name: 'Enable sound' }).click();
+    await audience.getByRole('button', { name: 'Mute sound' }).waitFor();
+    await audience.evaluate(() => { window.playedNotes = []; });
     await admin.getByRole('button', { name: 'Roll Round 1' }).click();
     await admin.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     await audience.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     assert.equal(await admin.getByRole('button', { name: 'Roll Round 2' }).isDisabled(), true);
     assert.equal(await admin.getByRole('button', { name: 'Reset demo' }).isDisabled(), true);
     assert.ok(await audience.locator('.reel-digit.rolling').first().evaluate(el => getComputedStyle(el, '::before').animationName === 'reel-roll'));
+    await audience.waitForFunction(() => window.playedNotes.some(note => note < 500));
     await audience.locator('#draw-stage .winner-reveal').waitFor();
     await audience.locator('.confetti-burst').waitFor({ state: 'attached' });
     await admin.locator('.confetti-burst').waitFor({ state: 'attached' });
+    await audience.waitForFunction(() => window.playedNotes.some(note => note > 1000));
+    await audience.getByRole('button', { name: 'Mute sound' }).click();
+    await audience.getByRole('button', { name: 'Enable sound' }).waitFor();
+    await audience.evaluate(() => { window.playedNotes = []; });
     await audience.emulateMedia({ reducedMotion: 'reduce' });
     assert.equal(await audience.locator('.confetti-burst').evaluate(el => getComputedStyle(el).display), 'none');
     await audience.emulateMedia({ reducedMotion: 'no-preference' });
@@ -59,6 +78,7 @@ test('browser: plan rounds then roll from public page as admin while audience on
     await audience.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     await audience.locator('#draw-stage .winner-reveal').waitFor();
     await audience.getByText('All rounds are complete.', { exact: true }).waitFor();
+    assert.equal(await audience.evaluate(() => window.playedNotes.length), 0);
     assert.equal(await audience.locator('#winners-list .winner-item').count(), 2);
     assert.equal(await admin.locator('[data-roll-round]').count(), 0);
     await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '10 seconds' WHERE event_id=1");
