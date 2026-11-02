@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS draws (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS one_claim_per_employee ON draws(person_id) WHERE status = 'claimed';
 CREATE UNIQUE INDEX IF NOT EXISTS one_pending_per_event ON draws(event_id) WHERE status = 'pending';
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS reveal_at TIMESTAMPTZ;
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS requested_count INTEGER NOT NULL DEFAULT 1 CHECK (requested_count BETWEEN 1 AND 1000);
+CREATE INDEX IF NOT EXISTS draws_event_reveal ON draws(event_id, reveal_at);
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL REFERENCES events(id),

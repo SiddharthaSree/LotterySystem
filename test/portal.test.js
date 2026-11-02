@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { harness } from './helpers.js';
 import { createApp } from '../lib/app.js';
+import { initialize } from '../lib/database.js';
 
 let h;
 before(async () => { h = await harness(); });
@@ -82,7 +83,7 @@ test('admin writes require both admin authentication and CSRF; bad credentials d
   await h.write('patch', '/admin/events/1', { ...h.settings, allowed_domains: 'gmail' }).expect(400);
 });
 
-test('absent selections preserve prizes and eligibility; a claim excludes all tickets and cannot be resolved twice', async () => {
+test('batch draws automatically award offline winners, clamp capacity, and exclude all their tickets', async () => {
   const created = (await h.write('post', '/admin/events', { ...h.settings, title: 'Draw test', prize_count: 2 }).expect(201)).body;
   const root = `/admin/events/${created.id}`;
   await h.write('post', `${root}/people`, { name: 'Only Candidate', email: 'only@gmail.com' }).expect(201);
@@ -90,28 +91,31 @@ test('absent selections preserve prizes and eligibility; a claim excludes all ti
   await h.write('patch', `${root}/people/${candidate.id}`, { extra_bonus: 5 }).expect(200);
   await h.write('post', `${root}/draw`, {}).expect(400);
   await h.write('patch', root, { ...created, status: 'live' }).expect(200);
-  let selection = (await h.write('post', `${root}/draw`, { prize_label: 'Gift hamper' }).expect(201)).body;
-  assert.equal(selection.person_id, candidate.id);
+  for (const invalid of [0, -1, 1.5, 1001, '', null, true]) {
+    await h.write('post', `${root}/draw`, { winner_count: invalid }).expect(400);
+  }
+  const selection = (await h.write('post', `${root}/draw`, { prize_label: 'Gift hamper', winner_count: 5 }).expect(201)).body;
+  assert.equal(selection.winner_count, 1);
+  assert.equal(selection.requested_count, 5);
+  assert.equal(selection.reduced, true);
+  const draw = selection.draws[0];
+  assert.equal(draw.person_id, candidate.id);
+  assert.equal(draw.status, 'claimed');
+  assert.ok(draw.resolved_at);
   await h.write('post', `${root}/draw`, {}).expect(400);
   await h.write('patch', root, { ...created, status: 'ended' }).expect(400);
   const rolling = (await h.admin.get(`/api/events/${created.id}/public`)).body;
   assert.equal(rolling.reveal_duration_ms, 10000);
   assert.equal(rolling.draws[0].name, null);
-  assert.equal(rolling.draws[0].reveal_ends_at - new Date(rolling.draws[0].created_at).getTime(), 10000);
-  await h.write('post', `${root}/draws/${selection.id}/resolve`, { status: 'absent' }).expect(400);
-  await h.write('post', `${root}/draws/${selection.id}/resolve`, { status: 'claimed' }).expect(400);
-  await h.pool.query("UPDATE draws SET created_at=NOW()-INTERVAL '11 seconds' WHERE id=$1", [selection.id]);
+  assert.equal(rolling.draws[0].reveal_ends_at - rolling.draws[0].reveal_starts_at, 10000);
+  assert.equal(rolling.remaining, 1);
+  assert.equal(rolling.stats.tickets, 0);
+  assert.equal(rolling.batch.active, true);
+  assert.equal(rolling.batch.requested_count, 5);
+  await h.write('post', `${root}/draws/${draw.id}/resolve`, { status: 'absent' }).expect(410);
+  await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [draw.id]);
   assert.equal((await h.admin.get(`/api/events/${created.id}/public`)).body.draws[0].name, 'Only Candidate');
-  await h.write('post', `${root}/draws/${selection.id}/resolve`, { status: 'absent' }).expect(200);
-  let data = (await h.admin.get(`/api/events/${created.id}/public`)).body;
-  assert.equal(data.remaining, 2);
-  assert.equal(data.stats.tickets, 6);
-  selection = (await h.write('post', `${root}/draw`, { prize_label: 'Gift hamper' }).expect(201)).body;
-  assert.equal(selection.person_id, candidate.id);
-  await h.pool.query("UPDATE draws SET created_at=NOW()-INTERVAL '11 seconds' WHERE id=$1", [selection.id]);
-  await h.write('post', `${root}/draws/${selection.id}/resolve`, { status: 'claimed' }).expect(200);
-  await h.write('post', `${root}/draws/${selection.id}/resolve`, { status: 'claimed' }).expect(400);
-  data = (await h.admin.get(`/api/events/${created.id}/public`)).body;
+  const data = (await h.admin.get(`/api/events/${created.id}/public`)).body;
   assert.equal(data.remaining, 1);
   assert.equal(data.stats.tickets, 0);
   await h.write('post', `${root}/draw`, {}).expect(400);
@@ -119,19 +123,43 @@ test('absent selections preserve prizes and eligibility; a claim excludes all ti
   assert.equal((await h.admin.get(`/api/events/${created.id}/public`)).body.stats.tickets, 0);
   const csv = await h.admin.get(`/api${root}/export`).expect(200);
   assert.ok(csv.text.includes('only@gmail.com'));
+  assert.equal((await h.admin.get(`/api${root}`)).body.people[0].won, true);
 });
 
-test('parallel draw and claim requests cannot consume a prize twice; ended events are immutable and isolated', async () => {
-  const event = (await h.write('post', '/admin/events', { ...h.settings, title: 'Concurrency test', prize_count: 1 }).expect(201)).body;
+test('parallel batch rolls award distinct people once, cap by prizes, and preserve sequential reveals', async () => {
+  const event = (await h.write('post', '/admin/events', { ...h.settings, title: 'Concurrency test', prize_count: 2 }).expect(201)).body;
   const root = `/admin/events/${event.id}`;
-  for (const name of ['One', 'Two']) await h.write('post', `${root}/people`, { name, email: `${name.toLowerCase()}@gmail.com` }).expect(201);
+  for (const name of ['One', 'Two', 'Three']) await h.write('post', `${root}/people`, { name, email: `${name.toLowerCase()}@gmail.com` }).expect(201);
+  const people = (await h.admin.get(`/api${root}`)).body.people;
+  for (const person of people) await h.write('patch', `${root}/people/${person.id}`, { extra_bonus: 5 }).expect(200);
   await h.write('patch', root, { ...event, status: 'live' }).expect(200);
-  const attempts = await Promise.all([h.write('post', `${root}/draw`, {}), h.write('post', `${root}/draw`, {})]);
+  const attempts = await Promise.all([h.write('post', `${root}/draw`, { winner_count: 3 }), h.write('post', `${root}/draw`, { winner_count: 3 })]);
   assert.deepEqual(attempts.map(r => r.status).sort(), [201, 400]);
-  const draw = attempts.find(r => r.status === 201).body;
-  await h.pool.query("UPDATE draws SET created_at=NOW()-INTERVAL '11 seconds' WHERE id=$1", [draw.id]);
-  const claims = await Promise.all([h.write('post', `${root}/draws/${draw.id}/resolve`, { status: 'claimed' }), h.write('post', `${root}/draws/${draw.id}/resolve`, { status: 'claimed' })]);
-  assert.deepEqual(claims.map(r => r.status).sort(), [200, 400]);
+  const batch = attempts.find(r => r.status === 201).body;
+  assert.equal(batch.winner_count, 2);
+  assert.equal(batch.reduced, true);
+  assert.equal(new Set(batch.draws.map(d => d.person_id)).size, 2);
+  assert.equal(new Set(batch.draws.map(d => d.batch_id)).size, 1);
+  assert.equal(new Date(batch.draws[1].reveal_at) - new Date(batch.draws[0].reveal_at), 12000);
+  let data = (await h.admin.get(`/api/events/${event.id}/public`)).body;
+  assert.equal(data.remaining, 0);
+  assert.equal(data.stats.tickets, 6);
+  assert.equal(data.current_draw_id, batch.draws[0].id);
+  assert.ok(data.draws.every(d => d.name === null));
+  assert.equal(data.draws[0].ticket_id, null);
+  await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [batch.draws[0].id]);
+  data = (await h.admin.get(`/api/events/${event.id}/public`)).body;
+  assert.equal(data.current_draw_id, batch.draws[0].id);
+  assert.ok(data.draws.find(d => d.id === batch.draws[0].id).name);
+  assert.equal(data.draws.find(d => d.id === batch.draws[1].id).name, null);
+  assert.equal(data.batch.active, true);
+  await h.write('patch', root, { ...event, prize_count: 1, status: 'live' }).expect(400);
+  await h.write('patch', root, { ...event, status: 'ended' }).expect(400);
+  await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE event_id=$1", [event.id]);
+  data = (await h.admin.get(`/api/events/${event.id}/public`)).body;
+  assert.equal(data.batch.active, false);
+  assert.equal(data.current_draw_id, batch.draws[1].id);
+  assert.ok(data.draws.every(d => d.name));
   await h.write('post', `${root}/draw`, {}).expect(400);
   await h.write('patch', root, { ...event, status: 'ended' }).expect(200);
   await h.write('post', `${root}/people`, { name: 'Too late', email: 'after@gmail.com' }).expect(400);
@@ -139,6 +167,37 @@ test('parallel draw and claim requests cannot consume a prize twice; ended event
   const otherPerson = (await h.admin.get('/api/admin/events/1')).body.people[0];
   const ownTask = (await h.admin.get(`/api${root}`)).body.tasks[0];
   await h.write('put', `/admin/events/1/people/${otherPerson.id}/tasks/${ownTask.id}`, { done: true }).expect(404);
+});
+
+test('awarded employees stay excluded across separate rolls and an award survives restart without viewers', async () => {
+  const event = (await h.write('post', '/admin/events', { ...h.settings, title: 'Separate rolls', prize_count: 3 }).expect(201)).body;
+  const root = `/admin/events/${event.id}`;
+  for (const name of ['Alpha', 'Beta']) await h.write('post', `${root}/people`, { name, email: `${name.toLowerCase()}@example.com` }).expect(201);
+  await h.write('patch', root, { ...event, status: 'live' }).expect(200);
+  const first = (await h.write('post', `${root}/draw`, {}).expect(201)).body.draws[0];
+  await h.write('patch', `${root}/people/${first.person_id}`, { extra_bonus: 100 }).expect(200);
+  await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [first.id]);
+  const second = (await h.write('post', `${root}/draw`, {}).expect(201)).body.draws[0];
+  assert.notEqual(first.person_id, second.person_id);
+  await initialize(h.pool);
+  assert.equal((await h.pool.query("SELECT COUNT(*)::int AS count FROM draws WHERE event_id=$1 AND status='claimed'", [event.id])).rows[0].count, 2);
+});
+
+test('upgrade automatically awards existing pending selections once and preserves past absent records', async () => {
+  const event = (await h.write('post', '/admin/events', { ...h.settings, title: 'Upgrade test' }).expect(201)).body;
+  const root = `/admin/events/${event.id}`;
+  await h.write('post', `${root}/people`, { name: 'Pending Person', email: 'pending@example.com' }).expect(201);
+  const person = (await h.admin.get(`/api${root}`)).body.people[0];
+  const ticket = (await h.pool.query('SELECT id FROM tickets WHERE person_id=$1', [person.id])).rows[0];
+  await h.pool.query("INSERT INTO draws(event_id,person_id,ticket_id,prize_label,status) VALUES($1,$2,$3,'Old prize','absent')", [event.id, person.id, ticket.id]);
+  await h.pool.query("INSERT INTO draws(event_id,person_id,ticket_id,prize_label) VALUES($1,$2,$3,'Pending prize')", [event.id, person.id, ticket.id]);
+  await initialize(h.pool);
+  await initialize(h.pool);
+  const rows = (await h.pool.query('SELECT status FROM draws WHERE event_id=$1 ORDER BY id', [event.id])).rows;
+  assert.deepEqual(rows.map(d => d.status), ['absent', 'claimed']);
+  const audits = (await h.pool.query("SELECT id FROM audit_log WHERE event_id=$1 AND action='draw.automatically_awarded_on_upgrade'", [event.id])).rows;
+  assert.equal(audits.length, 1);
+  assert.equal((await h.admin.get(`/api/events/${event.id}/public`)).body.stats.tickets, 0);
 });
 
 test('public HTML and static assets are served with protective headers', async () => {

@@ -22,7 +22,7 @@ async function api(path, method = 'GET', body) {
 }
 
 function serverNow() { return serverClock.time + performance.now() - serverClock.received; }
-function revealing(draw) { return draw?.status === 'pending' && draw.name === null; }
+function revealing(draw) { return Boolean(draw) && draw.name === null; }
 
 function toast(message, error = false) {
   clearTimeout(toastTimer);
@@ -34,8 +34,8 @@ function toast(message, error = false) {
 function route() { return location.hash.slice(1).split('?')[0] || 'home'; }
 function adminPath(suffix = '') { return `/admin/events/${state.eventId}${suffix}`; }
 function badge(status) {
-  const styles = { claimed: 'green', approved: 'green', live: 'green', absent: 'grey', ended: 'grey', pending: '', open: '' };
-  return `<span class="badge ${styles[status] || ''}">${escape(status)}</span>`;
+  const styles = { claimed: 'green', winner: 'green', approved: 'green', live: 'green', absent: 'grey', ended: 'grey', pending: '', open: '' };
+  return `<span class="badge ${styles[status] || ''}">${escape(status === 'claimed' ? 'awarded' : status === 'absent' ? 'past unawarded selection' : status)}</span>`;
 }
 function stat(value, label) { return `<div class="stat"><strong>${escape(value)}</strong><span>${escape(label)}</span></div>`; }
 function field(name, label, value = '', type = 'text', attrs = '') {
@@ -92,7 +92,7 @@ function renderHome() {
   ${activities(tasks)}
   <div class="notice">Participation is voluntary, and onsite and remote employees are equally welcome. Each activity counts once. More tickets improve your chances but never guarantee a prize. An internal alternative is available for the LinkedIn activity.</div>
   <div class="section-heading"><h2>Your route to the draw</h2></div>
-  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and work email. Your coordinator approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Send proof through Teams. An admin verifies completion and assigns the corresponding bonus tickets.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Be there for your moment</strong><p>Watch the draw online or onsite. Every active ticket has an equal chance, and each person can claim only one prize.</p></div></div>`;
+  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and work email. Your coordinator approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Send proof through Teams. An admin verifies completion and assigns the corresponding bonus tickets.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Celebrate your lucky moment</strong><p>Watch online or onsite, or check the winners later. Prizes are awarded even if you are offline. Each person can win only once per event.</p></div></div>`;
 }
 
 function renderEmployee() {
@@ -109,11 +109,12 @@ function renderEmployee() {
       <button class="primary full" type="submit">${signup ? 'Register for the event' : 'View my tickets'} &rarr;</button></form>`}
     </div></section>`;
   }
-  const { person, tickets, tasks, won } = state.me;
-  const eligible = person.approved && !won;
+  const { person, tickets, tasks, won, award_pending: awardPending } = state.me;
+  const eligible = person.approved && !won && !awardPending;
   return `<div class="page-heading"><div><p class="eyebrow">Your festive dashboard</p><h1>Hello, ${escape(person.name)}.</h1><p>${escape(person.email)}</p></div>${badge(won ? 'winner' : person.approved ? 'approved' : 'pending approval')}</div>
     ${!person.approved ? '<div class="notice"><strong>Your registration is awaiting admin approval.</strong> Your entry is saved. Contact your coordinator through Teams; tickets become eligible after approval.</div>' : ''}
-    ${won ? `<div class="notice green"><strong>Congratulations! You claimed ${escape(won)}.</strong> All your tickets are excluded from further draws in this event.</div>` : ''}
+    ${won ? `<div class="notice green"><strong>Congratulations! You won ${escape(won)}.</strong> Your prize is reserved, even if you were offline. Contact your coordinator to collect it later. All your tickets are excluded from further draws in this event.</div>` : ''}
+    ${awardPending ? '<div class="notice">A prize has been reserved for you. Watch the live draw for your ticket and name reveal. Your tickets are no longer eligible for another prize.</div>' : ''}
     <div class="stats">${stat(eligible ? tickets.length : 0, 'Eligible tickets')}${stat(1, 'Base ticket')}${stat(Math.max(0, tickets.length - 1), 'Allocated bonus tickets')}${stat(event.bonus_cap, 'Bonus-ticket cap')}</div>
     <div class="card"><h3>Your ticket wallet</h3><p>${eligible ? 'Each of these tickets is linked to your entry and has the same chance in the draw.' : 'Allocated ticket identifiers are shown below for your records; they are not currently eligible for selection.'}</p>
     <div class="ticket-list">${tickets.map(t => `<span class="mini-ticket">${ticketCode(t.id)} ${t.source_key === 'base' ? '/ BASE' : '/ BONUS'}</span>`).join('')}</div></div>
@@ -122,17 +123,16 @@ function renderEmployee() {
 }
 
 function winnersList() {
-  const wins = state.data.draws.filter(d => d.status === 'claimed').slice().reverse();
-  return `<div class="card"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners</h3>${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>No prizes claimed yet. Your moment could be next.</p>'}</div>`;
+  const wins = state.data.draws.filter(d => d.status === 'claimed' && !revealing(d)).slice().reverse();
+  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners</h3>${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div>`;
 }
 
-function stage(admin = false) {
-  const { event, draws, remaining } = state.data;
-  const pending = draws.find(d => d.status === 'pending');
-  const latest = draws[0];
-  const visible = pending || latest;
+function stage() {
+  const { event, draws, remaining, batch } = state.data;
+  const visible = draws.find(d => d.id === state.data.current_draw_id) || draws[0];
   const rolling = revealing(visible);
   return `<div class="draw-stage" id="draw-stage"><p class="eyebrow">${escape(event.title)}</p>
+    ${batch ? `<p class="batch-progress">Winner ${batch.current_position} of ${batch.winner_count}${batch.requested_count > batch.winner_count ? ` &middot; ${batch.requested_count} requested; ${batch.winner_count} available` : ''}</p>` : ''}
     ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
       <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
       <div class="ticket-reels" aria-hidden="true"><span class="reel-prefix">CSI</span>${String(visible.ticket_id).padStart(6, '0').split('').map(() => '<span class="reel-digit rolling">?</span>').join('')}</div>
@@ -140,22 +140,28 @@ function stage(admin = false) {
       <p id="reveal-message" role="status" aria-live="polite">Rolling the ticket numbers...</p>
       <p class="helper">Decorative animation &middot; the ticket is already randomly selected</p>
     </div><p>${escape(visible.prize_label)}</p>` :
-      visible ? `<div class="winner-reveal" role="status"><span class="badge">${pending ? 'Selected &middot; awaiting confirmation' : visible.status === 'claimed' ? 'Prize claimed &middot; congratulations!' : 'Not present &middot; still eligible'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p></div>` :
+      visible ? `<div class="winner-reveal" role="status"><span class="badge">${visible.status === 'claimed' ? 'Prize awarded &middot; congratulations!' : 'Past unawarded selection'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p><p class="helper">${batch?.active ? 'The next winner will roll automatically...' : 'Winners can collect their prizes later. Attendance is not required.'}</p></div>` :
       `<div class="orb" aria-hidden="true">&#10022;</div><h2>${event.status === 'ended' ? 'A celebration to remember.' : 'Your moment is coming.'}</h2><p>${event.status === 'live' ? 'The draw is live. Good luck, everyone!' : 'Grab a seat. The next lucky name could be yours.'}</p>`}
-    ${pending && admin && !rolling ? `<div class="actions"><button class="button success" data-resolve="${pending.id}" data-status="claimed">Present &amp; claimed</button><button class="button secondary" data-resolve="${pending.id}" data-status="absent">Absent &mdash; keep prize</button></div>` : ''}
     <p class="helper">${remaining} prize${remaining === 1 ? '' : 's'} remaining &middot; ${state.data.stats.tickets} eligible tickets</p>
   </div>`;
 }
 
+function drawHelp() {
+  return state.data.batch?.active ? 'Revealing winners one by one. All selected prizes are already reserved.' :
+    state.data.event.status !== 'live' ? 'Set the event status to Live in Settings before drawing.' :
+      'Each winner gets a 10-second reveal, with a short pause before the next. If fewer prizes or employees remain, only the available number will be awarded.';
+}
+
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  const pending = state.data.draws.some(d => d.status === 'pending');
   return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">Presentation mode &#8599;</button></div>` : ''}
-    <div class="draw-layout"><div>${stage(admin)}
-    ${admin ? `<form data-form="draw" class="card"><h3>Roll the next lucky ticket</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}<button class="primary full" type="submit" ${event.status !== 'live' || !remaining || pending ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper">${pending ? 'Wait for the reveal, then confirm whether the selected employee is present.' : event.status !== 'live' ? 'Set the event status to Live in Settings before drawing.' : 'A 10-second ticket reveal plays here and on the audience screen. Every eligible ticket has an equal chance.'}</p></form>` :
-      '<p class="helper">This screen updates automatically. If selected, make yourself known to the coordinator. An absent selection does not consume a prize.</p>'}</div>${winnersList()}</div>
-    <div class="notice">Only a confirmed claim uses a prize. An absent employee stays eligible for a later selection. Once a person claims a prize, all their tickets are excluded for the rest of this event.</div>
-    ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export claimed winners (CSV)</a></div>${drawHistory()}` : ''}`;
+    <div class="draw-layout"><div>${stage()}
+    ${admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
+      ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
+      <button class="primary full" type="submit" ${event.status !== 'live' || !remaining || state.data.batch?.active || !state.data.stats.tickets ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper" id="draw-roll-help">${drawHelp()}</p></form>` :
+      '<p class="helper">This screen updates automatically. Each winning ticket is followed by the employee name. Winners keep their prize even if they are offline.</p>'}</div>${winnersList()}</div>
+    <div class="notice">Every selected winner is automatically awarded one prize. Attendance and separate confirmation are not required; prizes can be collected later. All other tickets belonging to a winner are excluded immediately, including within the same roll.</div>
+    ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export winners (CSV)</a></div>${drawHistory()}` : ''}`;
 }
 
 function drawHistory() {
@@ -174,7 +180,7 @@ function renderPeople() {
     <p class="helper">Tick only after verifying activity evidence through Teams. Unticking reverses the ticket reward. The event cap applies automatically.</p>
     ${tasks.map(t => `<label class="check-row"><input type="checkbox" data-complete="${t.id}" data-owner="${person.id}" ${completions.some(c => c.person_id === person.id && c.task_id === t.id && c.done) ? 'checked' : ''} ${ended || !t.active ? 'disabled' : ''}><span>${escape(t.title)}${!t.active ? ' (inactive)' : ''}<br><small>+${t.reward} ticket${t.reward === 1 ? '' : 's'}</small></span></label>`).join('')}
     <form data-form="manual-bonus" data-owner="${person.id}">${field('extra_bonus', 'Additional admin bonus (subject to event cap)', person.extra_bonus, 'number', 'min="0" max="100" required')}<button class="secondary" ${ended ? 'disabled' : ''}>Save admin bonus</button></form>
-    <div class="notice">${person.ticket_count} allocated tickets. ${person.won ? 'Already a claimed winner; no tickets are eligible.' : !person.approved ? 'Approval is needed before tickets are eligible.' : 'All active tickets are eligible until a prize is claimed.'}</div>` :
+    <div class="notice">${person.ticket_count} allocated tickets. ${person.won ? 'Already a winner; no tickets are eligible.' : !person.approved ? 'Approval is needed before tickets are eligible.' : 'All active tickets are eligible until a prize is awarded.'}</div>` :
       '<p class="eyebrow">Keep it fair</p><h3>Every ticket starts with verification.</h3><p>Select an employee to approve their registration, verify activities, or adjust their admin bonus.</p><div class="notice">Activity completion is idempotent: marking Done twice never creates duplicate rewards.</div>'}</aside></div>`;
 }
 
@@ -193,7 +199,7 @@ function renderSettings() {
   const event = state.data.event;
   return `<div class="two-col"><form data-form="settings" class="card"><h2>Event settings</h2>${settingsFields(event)}
     <label class="field">Event status<select name="status"><option value="open" ${event.status === 'open' ? 'selected' : ''}>Open - registration &amp; activities</option><option value="live" ${event.status === 'live' ? 'selected' : ''}>Live - draw enabled</option><option value="ended" ${event.status === 'ended' ? 'selected' : ''}>Ended - read-only archive</option></select></label>
-    <div class="notice">Tickets can be updated while Open or Live. Ending an event locks its records permanently. Resolve any pending selection first.</div><button class="primary" ${event.status === 'ended' ? 'disabled' : ''}>Save event settings</button></form>
+    <div class="notice">Tickets can be updated while Open or Live. Ending an event locks its records permanently. Wait for any winner reveals to finish first.</div><button class="primary" ${event.status === 'ended' ? 'disabled' : ''}>Save event settings</button></form>
     <div><form data-form="new-event" class="card"><p class="eyebrow">Made for your next celebration</p><h2>Create a new event</h2><p class="muted small">Start fresh with demo tasks. Employees, tickets, and winners remain separate for every event.</p>${settingsFields({ ...event, title: 'Our next lucky draw', signup_closes_at: new Date(Date.now() + 7 * 86400000).toISOString() })}<button class="primary">Create new event</button></form>
     <div class="notice">Email-only employee access is intentionally lightweight: anyone who knows an approved address can open that employee dashboard. Admin actions always require the admin password.</div></div></div>`;
 }
@@ -244,6 +250,7 @@ document.addEventListener('submit', event => {
   action(async () => {
     const body = Object.fromEntries(new FormData(form));
     const type = form.dataset.form;
+    let drawResult;
     if (['settings', 'new-event'].includes(type)) {
       body.signup_closes_at += ':00+05:30';
       if (type === 'settings' && body.status === 'ended' && !confirm('End this event permanently? Records become read-only.')) return;
@@ -265,10 +272,11 @@ document.addEventListener('submit', event => {
       await api(adminPath(`/tasks${form.dataset.task ? `/${form.dataset.task}` : ''}`), form.dataset.task ? 'PATCH' : 'POST', body);
     } else if (type === 'add-person') await api(adminPath('/people'), 'POST', body);
     else if (type === 'manual-bonus') await api(adminPath(`/people/${form.dataset.owner}`), 'PATCH', body);
-    else if (type === 'draw') await api(adminPath('/draw'), 'POST', body);
+    else if (type === 'draw') drawResult = await api(adminPath('/draw'), 'POST', body);
     state.events = await api('/events');
     await refresh();
-    toast(type === 'signup' ? 'Registration saved. Your entry is awaiting admin approval.' : type === 'draw' ? 'Rolling! Watch the ticket reveal on the draw screen.' : 'Saved successfully.');
+    toast(type === 'signup' ? 'Registration saved. Your entry is awaiting admin approval.' :
+      drawResult ? `${drawResult.winner_count} prize${drawResult.winner_count === 1 ? '' : 's'} awarded${drawResult.reduced ? ` (${drawResult.requested_count} requested; only ${drawResult.winner_count} available)` : ''}. Watch the winners reveal one by one.` : 'Saved successfully.');
   });
 });
 
@@ -278,12 +286,6 @@ document.addEventListener('click', event => {
   if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
-  else if (button.dataset.resolve) action(async () => {
-    if (button.dataset.status === 'claimed' && !confirm('Confirm this employee is present and has claimed this prize? They cannot win again in this event.')) return;
-    await api(adminPath(`/draws/${button.dataset.resolve}/resolve`), 'POST', { status: button.dataset.status });
-    await refresh();
-    toast(button.dataset.status === 'claimed' ? 'Prize claimed. All tickets for this winner are now excluded.' : 'Marked absent. The prize remains available and the employee stays eligible.');
-  });
   else if (button.dataset.action === 'refresh') action(refresh);
   else if (button.dataset.action === 'fullscreen') {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -394,7 +396,13 @@ setInterval(async () => {
       const input = $('#app input:focus');
       if (!input) render();
       else if ($('#draw-stage')) {
-        $('#draw-stage').outerHTML = stage(page === 'admin');
+        $('#draw-stage').outerHTML = stage();
+        $('#winners-list').outerHTML = winnersList();
+        const roll = $('[data-form="draw"] button');
+        if (roll) {
+          roll.disabled = state.data.event.status !== 'live' || !state.data.remaining || state.data.batch?.active || !state.data.stats.tickets;
+          $('#draw-roll-help').textContent = drawHelp();
+        }
         const history = $('#app .table-wrap');
         if (page === 'admin' && history) history.outerHTML = drawHistory();
       }

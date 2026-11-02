@@ -10,9 +10,9 @@ A reusable employee engagement portal with a public audience screen, employee da
 - Admin-configurable tasks, rewards, manual bonuses, and a per-event bonus cap.
 - Teams-based proof verification. Admins mark tasks Done or Not done; allocations are reversible and never duplicate on repeated completion.
 - Persistent unique ticket IDs and cryptographically random selection across eligible tickets.
-- Pending selections must be confirmed as Claimed or Absent. Absent selections do not consume prizes and remain eligible. Claimed winners never win again in the same event, even if an admin later changes their ticket allocations.
+- Choose a prize name and number of winners per roll. Distinct employees are selected, weighted by eligible tickets, and their prizes are automatically reserved regardless of attendance. Every selected employee is excluded from all later selections in that event, even within the same roll or if an admin later changes their ticket allocations.
 - Multiple events with separate employees, tickets, tasks, winners, and audit trails. Titles and event rules are editable.
-- Public live draw screen (one-second updates), a synchronized 10-second rolling ticket reveal, responsive mobile layouts, presentation mode, winner history, CSV export, and an admin audit trail.
+- Public live draw screen (one-second updates), synchronized sequential 10-second ticket-and-name reveals with a short pause between winners, responsive mobile layouts, presentation mode, winner history, CSV export, and an admin audit trail.
 - PostgreSQL-backed production sessions, CSRF protection, admin login rate limiting, secure production cookies, parameterized database queries, and protective HTTP headers.
 
 ## Local preview without a database account
@@ -102,9 +102,15 @@ For manual setup, generate a session secret locally with `node -e "console.log(r
 3. **People & tickets:** approve signups, mark verified tasks, and resolve missing-ticket concerns. Admins can add approved employees after the cutoff and bypass the public email-domain restriction.
 4. Tickets are recalculated whenever completion, rewards, task availability, manual bonuses, or the cap changes. Active completed tasks are allocated in task-creation order; manual bonuses use the remaining cap. Every employee has one base ticket, and no allocation can exceed `1 + bonus cap`.
 5. Set status to **Live** to enable drawing. Open the audience screen in another window and share its event-specific link. Audience screens show names, prize labels, and selected ticket IDs, not emails.
-6. Enter a prize label and click **Roll & reveal**. Only admins can start a draw. The server first selects the ticket using the existing fair random selection; the animation is decorative and does not change the result. For roughly 10 seconds, ticket digits roll and settle one by one on the admin and audience screens, followed by the selected employee's name. Screens use the same server-timed reveal, including when reloaded or opened partway through; network latency can slightly delay audience updates. Reduced-motion mode uses placeholders instead of rapidly changing digits. The employee name is withheld from the public response until the reveal ends, and attendance confirmation is blocked during the reveal. Confirm **Present & claimed**, or choose **Absent - keep prize** and draw again. The same absent employee can legitimately be selected again because they remain eligible.
-7. Admin ticket changes remain available during the live event, as requested. Resolve pending selections before changing event status. Confirmed claims exclude the winner regardless of later approval or reward changes.
-8. Export claimed winners as CSV. End the event when complete; **Ended is a permanent read-only archive**. Create a new event for the next celebration instead of resetting old winners.
+6. Enter a prize label and **Number of winners** (1-1000), then click **Roll & reveal**. Only admins can start a roll. The server chooses a random eligible ticket, awards its employee a prize, removes all that employee's tickets from eligibility, and repeats for the requested number of distinct winners. Each ticket has an equal chance at each selection; employees with more eligible tickets have a proportionately higher chance before they win. If fewer prizes or eligible employees remain, the roll automatically awards only the available number and shows both requested and actual counts. Zero capacity produces an explicit error.
+7. All awards are saved atomically before animation begins: no attendance check, confirmation button, or open browser is needed to keep the prize. The animation is decorative and never changes the results. Each winner's ticket rolls and settles for 10 seconds, followed by the employee's name; after a two-second pause, the next winner rolls automatically. The name remains visible in the winner list. Screens share server timestamps and resume the correct winner if reloaded or opened partway through. Network latency can slightly delay updates. Reduced-motion mode uses placeholders instead of rapidly changing digits. Names are withheld from the public response until their individual reveal ends, and future winners' tickets are hidden until their roll begins.
+8. Another roll and leaving Live status are blocked until the last winner is revealed. Admin ticket changes remain available, but awards exclude winners regardless of later approval or reward changes. The remaining prize count drops as soon as the batch is saved, including for winners whose reveal is still queued.
+9. Winners can collect their prizes later, even if they were offline during the draw. Export winners as CSV and coordinate distribution outside the portal. The portal records awards, not physical delivery or collection.
+10. End the event when complete; **Ended is a permanent read-only archive**. Create a new event for the next celebration instead of resetting old winners.
+
+### Upgrading from attendance-based draws
+
+Startup adds the batch/reveal fields without deleting event records. Any old selection still awaiting attendance confirmation is automatically awarded exactly once and logged in the audit trail. Previously awarded winners remain excluded. Old absent selections are preserved as unawarded history; those employees remain eligible unless they subsequently won. The database retains `status='claimed'` for awarded records for compatibility, but the interface and CSV describe them as awards, not prize collection. The old attendance-resolution endpoint returns an explicit upgrade message instead of undoing an award.
 
 Public registration closes at the configured timestamp regardless of Open/Live status. Admin additions are allowed until the event ends. Status Open does not pause registration before the cutoff.
 
@@ -128,7 +134,7 @@ npm run lint
 npm test
 ```
 
-The tests cover signup/approval, domain and deadline restrictions, cap enforcement, reversible/idempotent rewards, manual bonuses, cross-event isolation, absent/claimed rules, concurrent draw and claim requests, permanent event closure, PostgreSQL session persistence, secure-cookie behaviour, static assets, and the browser workflow including a mobile audience screen.
+The tests cover signup/approval, domain and deadline restrictions, cap enforcement, reversible/idempotent rewards, manual bonuses, cross-event isolation, automatic offline awards, distinct winners within/across rolls, reduced batch sizes, invalid winner counts, concurrent rolls, prize limits, pending-selection upgrades, permanent event closure, PostgreSQL session persistence, secure-cookie behaviour, and static assets. Browser tests verify sequential ticket/name reveals, no early winner-list spoilers, attendance-free awards, late/reloaded audience screens, reduced-motion mode, and mobile layouts.
 
 ## Operations
 
