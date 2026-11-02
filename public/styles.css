@@ -131,6 +131,16 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .draw-stage .orb { font-size: 70px; line-height: 1; color: var(--gold); animation: breathe 3s ease-in-out infinite; }
 .draw-stage .ticket-code { color: var(--gold); font: 12px Consolas, monospace; margin-bottom: 15px; }
 .draw-stage .actions { justify-content: center; }
+.ticket-reveal { width: 100%; }
+.ticket-reveal h2 { font-size: clamp(26px, 4vw, 42px); }
+.ticket-reels { display: flex; justify-content: center; align-items: center; gap: 7px; margin: 26px 0; }
+.reel-prefix { font: 700 16px Consolas, monospace; color: var(--gold); margin-right: 5px; }
+.reel-digit { display: grid; place-items: center; width: clamp(24px, 4vw, 48px); height: 66px; border: 1px solid #ffd58d55; border-radius: 9px; background: #ffffff10; font: 700 clamp(24px, 4vw, 39px) Consolas, monospace; color: var(--gold); }
+.reel-digit.rolling { animation: reel-roll .18s ease-in-out infinite alternate; }
+.reel-digit.settled { background: var(--gold); color: var(--wine-dark); border-color: var(--gold); box-shadow: 0 0 18px #ffd58d22; }
+.reveal-track { max-width: 380px; height: 4px; background: #ffffff20; border-radius: 4px; overflow: hidden; margin: 0 auto 15px; }
+.reveal-track span { display: block; height: 100%; width: 0; background: var(--gold); transition: width .1s linear; }
+.winner-reveal { animation: winner-enter .7s ease-out both; }
 .draw-layout { display: grid; grid-template-columns: 1.7fr 1fr; gap: 22px; align-items: start; }
 .winner-item { display: flex; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .winner-rank { display: grid; place-items: center; border-radius: 50%; background: #fff1d7; color: #b17c39; width: 33px; height: 33px; font-size: 12px; font-weight: 700; flex-shrink: 0; }
@@ -148,6 +158,8 @@ footer { border-top: 1px solid var(--line); padding: 23px 5%; display: flex; jus
 main:fullscreen { background: var(--paper); overflow-y: auto; max-width: none; width: 100%; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes breathe { 50% { transform: scale(1.13) rotate(15deg); } }
+@keyframes reel-roll { to { transform: translateY(-3px); opacity: .6; } }
+@keyframes winner-enter { from { opacity: 0; transform: translateY(15px) scale(.96); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 @media (max-width: 1000px) {
   .site-header { padding: 18px 4%; }
@@ -187,6 +199,9 @@ main:fullscreen { background: var(--paper); overflow-y: auto; max-width: none; w
   .tabs { width: 100%; }
   .tabs button { padding: 8px 10px; font-size: 11px; }
   .draw-stage { padding: 32px 20px; min-height: 300px; }
+  .ticket-reels { gap: 4px; }
+  .reel-prefix { font-size: 11px; margin-right: 1px; }
+  .reel-digit { height: 49px; }
   .section-heading { align-items: start; flex-direction: column; gap: 8px; }
   footer { flex-direction: column; gap: 5px; }
 }

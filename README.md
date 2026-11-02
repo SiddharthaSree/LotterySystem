@@ -12,7 +12,7 @@ A reusable employee engagement portal with a public audience screen, employee da
 - Persistent unique ticket IDs and cryptographically random selection across eligible tickets.
 - Pending selections must be confirmed as Claimed or Absent. Absent selections do not consume prizes and remain eligible. Claimed winners never win again in the same event, even if an admin later changes their ticket allocations.
 - Multiple events with separate employees, tickets, tasks, winners, and audit trails. Titles and event rules are editable.
-- Public live draw screen (five-second updates), responsive mobile layouts, presentation mode, winner history, CSV export, and an admin audit trail.
+- Public live draw screen (one-second updates), a synchronized 10-second rolling ticket reveal, responsive mobile layouts, presentation mode, winner history, CSV export, and an admin audit trail.
 - PostgreSQL-backed production sessions, CSRF protection, admin login rate limiting, secure production cookies, parameterized database queries, and protective HTTP headers.
 
 ## Local preview without a database account
@@ -102,7 +102,7 @@ For manual setup, generate a session secret locally with `node -e "console.log(r
 3. **People & tickets:** approve signups, mark verified tasks, and resolve missing-ticket concerns. Admins can add approved employees after the cutoff and bypass the public email-domain restriction.
 4. Tickets are recalculated whenever completion, rewards, task availability, manual bonuses, or the cap changes. Active completed tasks are allocated in task-creation order; manual bonuses use the remaining cap. Every employee has one base ticket, and no allocation can exceed `1 + bonus cap`.
 5. Set status to **Live** to enable drawing. Open the audience screen in another window and share its event-specific link. Audience screens show names, prize labels, and selected ticket IDs, not emails.
-6. Enter a prize label and select a ticket. Confirm **Present & claimed**, or choose **Absent - keep prize** and draw again. The same absent employee can legitimately be selected again because they remain eligible.
+6. Enter a prize label and click **Roll & reveal**. Only admins can start a draw. The server first selects the ticket using the existing fair random selection; the animation is decorative and does not change the result. For roughly 10 seconds, ticket digits roll and settle one by one on the admin and audience screens, followed by the selected employee's name. Screens use the same server-timed reveal, including when reloaded or opened partway through; network latency can slightly delay audience updates. Reduced-motion mode uses placeholders instead of rapidly changing digits. The employee name is withheld from the public response until the reveal ends, and attendance confirmation is blocked during the reveal. Confirm **Present & claimed**, or choose **Absent - keep prize** and draw again. The same absent employee can legitimately be selected again because they remain eligible.
 7. Admin ticket changes remain available during the live event, as requested. Resolve pending selections before changing event status. Confirmed claims exclude the winner regardless of later approval or reward changes.
 8. Export claimed winners as CSV. End the event when complete; **Ended is a permanent read-only archive**. Create a new event for the next celebration instead of resetting old winners.
 

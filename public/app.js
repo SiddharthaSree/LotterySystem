@@ -4,6 +4,10 @@ const date = value => new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', ti
 const ticketCode = id => `CSI-${String(id).padStart(6, '0')}`;
 const state = { session: {}, events: [], eventId: null, data: null, me: null, admin: null, tab: 'people', personId: null, authTab: 'signup', busy: false };
 let toastTimer;
+let serverClock = { time: Date.now(), received: performance.now() };
+let polling = false;
+let lastPoll = 0;
+let connectionLost = false;
 
 async function api(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -13,8 +17,12 @@ async function api(path, method = 'GET', body) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Request failed. Please try again.');
   if (result.csrf) state.session.csrf = result.csrf;
+  if (result.server_now) serverClock = { time: result.server_now, received: performance.now() };
   return result;
 }
+
+function serverNow() { return serverClock.time + performance.now() - serverClock.received; }
+function revealing(draw) { return draw?.status === 'pending' && draw.name === null; }
 
 function toast(message, error = false) {
   clearTimeout(toastTimer);
@@ -123,10 +131,18 @@ function stage(admin = false) {
   const pending = draws.find(d => d.status === 'pending');
   const latest = draws[0];
   const visible = pending || latest;
+  const rolling = revealing(visible);
   return `<div class="draw-stage" id="draw-stage"><p class="eyebrow">${escape(event.title)}</p>
-    ${visible ? `<span class="badge">${pending ? 'Selected &middot; awaiting confirmation' : visible.status === 'claimed' ? 'Prize claimed &middot; congratulations!' : 'Not present &middot; still eligible'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p>` :
+    ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
+      <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
+      <div class="ticket-reels" aria-hidden="true"><span class="reel-prefix">CSI</span>${String(visible.ticket_id).padStart(6, '0').split('').map(() => '<span class="reel-digit rolling">?</span>').join('')}</div>
+      <div class="reveal-track" aria-hidden="true"><span id="reveal-progress"></span></div>
+      <p id="reveal-message" role="status" aria-live="polite">Rolling the ticket numbers...</p>
+      <p class="helper">Decorative animation &middot; the ticket is already randomly selected</p>
+    </div><p>${escape(visible.prize_label)}</p>` :
+      visible ? `<div class="winner-reveal" role="status"><span class="badge">${pending ? 'Selected &middot; awaiting confirmation' : visible.status === 'claimed' ? 'Prize claimed &middot; congratulations!' : 'Not present &middot; still eligible'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p></div>` :
       `<div class="orb" aria-hidden="true">&#10022;</div><h2>${event.status === 'ended' ? 'A celebration to remember.' : 'Your moment is coming.'}</h2><p>${event.status === 'live' ? 'The draw is live. Good luck, everyone!' : 'Grab a seat. The next lucky name could be yours.'}</p>`}
-    ${pending && admin ? `<div class="actions"><button class="button success" data-resolve="${pending.id}" data-status="claimed">Present &amp; claimed</button><button class="button secondary" data-resolve="${pending.id}" data-status="absent">Absent &mdash; keep prize</button></div>` : ''}
+    ${pending && admin && !rolling ? `<div class="actions"><button class="button success" data-resolve="${pending.id}" data-status="claimed">Present &amp; claimed</button><button class="button secondary" data-resolve="${pending.id}" data-status="absent">Absent &mdash; keep prize</button></div>` : ''}
     <p class="helper">${remaining} prize${remaining === 1 ? '' : 's'} remaining &middot; ${state.data.stats.tickets} eligible tickets</p>
   </div>`;
 }
@@ -136,14 +152,14 @@ function renderDraw(admin = false) {
   const pending = state.data.draws.some(d => d.status === 'pending');
   return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">Presentation mode &#8599;</button></div>` : ''}
     <div class="draw-layout"><div>${stage(admin)}
-    ${admin ? `<form data-form="draw" class="card"><h3>Draw the next ticket</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}<button class="primary full" type="submit" ${event.status !== 'live' || !remaining || pending ? 'disabled' : ''}>Select a lucky ticket &rarr;</button><p class="helper">${pending ? 'Confirm whether the selected employee is present before continuing.' : event.status !== 'live' ? 'Set the event status to Live in Settings before drawing.' : 'Selection uses cryptographically secure randomness across all eligible tickets.'}</p></form>` :
+    ${admin ? `<form data-form="draw" class="card"><h3>Roll the next lucky ticket</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}<button class="primary full" type="submit" ${event.status !== 'live' || !remaining || pending ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper">${pending ? 'Wait for the reveal, then confirm whether the selected employee is present.' : event.status !== 'live' ? 'Set the event status to Live in Settings before drawing.' : 'A 10-second ticket reveal plays here and on the audience screen. Every eligible ticket has an equal chance.'}</p></form>` :
       '<p class="helper">This screen updates automatically. If selected, make yourself known to the coordinator. An absent selection does not consume a prize.</p>'}</div>${winnersList()}</div>
     <div class="notice">Only a confirmed claim uses a prize. An absent employee stays eligible for a later selection. Once a person claims a prize, all their tickets are excluded for the rest of this event.</div>
     ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export claimed winners (CSV)</a></div>${drawHistory()}` : ''}`;
 }
 
 function drawHistory() {
-  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${escape(d.name)}</td><td>${escape(d.prize_label)}</td><td>${ticketCode(d.ticket_id)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${revealing(d) ? 'Reveal in progress...' : escape(d.name)}</td><td>${escape(d.prize_label)}</td><td>${revealing(d) ? 'CSI-??????' : ticketCode(d.ticket_id)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
 }
 
 function renderPeople() {
@@ -252,7 +268,7 @@ document.addEventListener('submit', event => {
     else if (type === 'draw') await api(adminPath('/draw'), 'POST', body);
     state.events = await api('/events');
     await refresh();
-    toast(type === 'signup' ? 'Registration saved. Your entry is awaiting admin approval.' : type === 'draw' ? 'A lucky ticket has been selected. Confirm attendance and claim.' : 'Saved successfully.');
+    toast(type === 'signup' ? 'Registration saved. Your entry is awaiting admin approval.' : type === 'draw' ? 'Rolling! Watch the ticket reveal on the draw screen.' : 'Saved successfully.');
   });
 });
 
@@ -334,13 +350,39 @@ async function initialize() {
   }
 }
 
+setInterval(() => {
+  const container = $('[data-reveal]');
+  if (!container || !state.data) return;
+  const draw = state.data.draws.find(d => String(d.id) === container.dataset.reveal);
+  if (!draw) return;
+  const duration = state.data.reveal_duration_ms;
+  const elapsed = Math.max(0, duration - (draw.reveal_ends_at - serverNow()));
+  const digits = String(draw.ticket_id).padStart(6, '0');
+  const fixed = Math.min(digits.length, Math.max(0, Math.floor((elapsed - 3000) / (6000 / digits.length))));
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  container.querySelectorAll('.reel-digit').forEach((digit, index) => {
+    const settled = index < fixed;
+    digit.textContent = settled ? digits[index] : reducedMotion ? '?' : String(Math.floor(Math.random() * 10));
+    digit.classList.toggle('rolling', !settled);
+    digit.classList.toggle('settled', settled);
+  });
+  $('#reveal-progress').style.width = `${Math.min(100, elapsed / duration * 100)}%`;
+  const message = elapsed < 3000 ? 'Rolling the ticket numbers...' : elapsed < duration ? 'Revealing your lucky ticket...' : 'Ticket revealed. Waiting for the selected name...';
+  if ($('#reveal-message').textContent !== message) $('#reveal-message').textContent = message;
+}, 100);
+
 setInterval(async () => {
-  if (document.hidden || state.busy || !state.data) return;
+  if (document.hidden || state.busy || polling || !state.data) return;
   const page = route();
   if (page !== 'draw' && page !== 'employee' && !(page === 'admin' && state.tab === 'draw')) return;
+  if (page === 'employee' && Date.now() - lastPoll < 5000) return;
+  polling = true;
+  lastPoll = Date.now();
+  const eventId = state.eventId;
   try {
-    const data = await api(`/events/${state.eventId}/public`);
-    const changed = JSON.stringify(data) !== JSON.stringify(state.data);
+    const data = await api(`/events/${eventId}/public`);
+    if (eventId !== state.eventId) return;
+    const changed = JSON.stringify({ ...data, server_now: 0 }) !== JSON.stringify({ ...state.data, server_now: 0 });
     state.data = data;
     if (page === 'employee' && state.session.personId) {
       const me = await api('/me');
@@ -348,8 +390,21 @@ setInterval(async () => {
       const employeeChanged = JSON.stringify(me) !== JSON.stringify(state.me);
       state.me = me;
       if (changed || employeeChanged) render();
-    } else if (changed && !$('#app input:focus')) render();
-  } catch { /* Keep the last known screen during a temporary connection failure. */ }
-}, 5000);
+    } else if (changed) {
+      const input = $('#app input:focus');
+      if (!input) render();
+      else if ($('#draw-stage')) {
+        $('#draw-stage').outerHTML = stage(page === 'admin');
+        const history = $('#app .table-wrap');
+        if (page === 'admin' && history) history.outerHTML = drawHistory();
+      }
+    }
+    if (connectionLost) toast('Live connection restored.');
+    connectionLost = false;
+  } catch {
+    if (!connectionLost) toast('Live updates interrupted. Reconnecting automatically; keep this screen open.', true);
+    connectionLost = true;
+  } finally { polling = false; }
+}, 1000);
 
 initialize();
