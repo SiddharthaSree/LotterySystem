@@ -124,6 +124,18 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .check-row small { color: var(--muted); }
 .ticket-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
 .mini-ticket { border: 1px dashed #cfb791; background: #fff7e6; border-radius: 7px; padding: 10px 15px; color: #926027; font: 650 12px Consolas, monospace; }
+.golden-ticket { background: linear-gradient(120deg, #fff5c3, #f8d774 45%, #ffeeb1 70%, #e8bb50); color: #513710; border: 2px solid #c39531; border-radius: 22px; padding: 32px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; box-shadow: 0 12px 35px #98701826, inset 0 0 0 6px #fff5c355; }
+.golden-ticket h2 { font-size: clamp(24px, 3vw, 36px); overflow-wrap: anywhere; }
+.golden-ticket .eyebrow { color: #725015; }
+.golden-prize { font-size: 20px; font-weight: 700; }
+.golden-ticket blockquote { margin: 20px 0; font-size: 17px; font-style: italic; }
+.golden-ticket-stub { border-left: 2px dashed #a47725; padding-left: 24px; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-width: 0; }
+.golden-ticket-stub span { font-size: 11px; font-weight: 800; letter-spacing: 2px; }
+.golden-ticket-stub strong { font: 800 clamp(16px, 2vw, 26px) Consolas, monospace; overflow-wrap: anywhere; }
+.golden-ticket-stub p { font-size: 12px; overflow-wrap: anywhere; }
+.golden-collection { grid-column: 1 / -1; margin: 0; padding-top: 16px; border-top: 1px solid #b3893f77; font-size: 12px; }
+.winner-grid { max-height: 520px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #b98a46 #fff7e6; scrollbar-gutter: stable; }
+.sound-status { color: var(--muted); font-size: 11px; margin: 8px 0; }
 .draw-stage { background: radial-gradient(ellipse at top, #9d3948, #54172f 70%); padding: 40px; border-radius: 22px; text-align: center; color: white; min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; position: relative; }
 .draw-stage .eyebrow { color: var(--gold); }
 .draw-stage h2 { font-size: clamp(32px, 6vw, 64px); letter-spacing: -1.5px; margin: 14px 0; overflow-wrap: anywhere; }
@@ -203,6 +215,8 @@ main:fullscreen { background: var(--paper); max-width: none; width: 100%; }
   .auth-layout { gap: 30px; }
 }
 @media (max-width: 640px) {
+  .golden-ticket { grid-template-columns: 1fr; padding: 24px; gap: 16px; }
+  .golden-ticket-stub { border-left: 0; border-top: 2px dashed #a47725; padding: 16px 0 0; }
   .site-header { flex-direction: column; align-items: start; gap: 17px; }
   .brand { font-size: 13px; }
   nav { width: 100%; justify-content: space-between; }
@@ -276,8 +290,9 @@ main.presentation {
 .presentation #winners-list { min-height: 0; display: flex; flex-direction: column; }
 .presentation #winners-list > .eyebrow { margin-bottom: 8px; }
 .presentation #winners-list h3 { margin-bottom: 8px; }
-.presentation .winner-grid { display: grid; grid-template-rows: repeat(8, minmax(0, 1fr)); flex: 1; min-height: 0; }
-.presentation .winner-item { min-height: 0; padding: 6px 0; gap: 8px; }
+.presentation .winner-grid { flex: 1; min-height: 0; max-height: none; }
+.presentation .winner-item { min-height: 50px; padding: 8px 0; gap: 8px; }
+.presentation .sound-status { margin: 0; flex-shrink: 0; font-size: 10px; }
 .presentation .winner-item > div { min-width: 0; }
 .presentation .winner-item strong { font-size: 13px; overflow-wrap: anywhere; line-height: 1.2; display: block; }
 .presentation .winner-item p { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }

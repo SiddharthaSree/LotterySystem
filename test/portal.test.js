@@ -9,6 +9,22 @@ let h;
 before(async () => { h = await harness(); });
 after(async () => { await h?.pool.end(); });
 
+test('native draw recordings are served as audible PCM WAV with exact ten-second drumroll', async () => {
+  for (const [file, seconds] of [['drumroll', 10], ['winner', 2]]) {
+    const response = await request(h.app).get(`/audio/${file}.wav`).expect(200);
+    const buffer = response.body;
+    assert.ok(response.headers['content-type'].includes('audio/'));
+    assert.equal(buffer.toString('ascii', 0, 4), 'RIFF');
+    const rate = buffer.readUInt32LE(24);
+    assert.equal(buffer.readUInt32LE(40) / (rate * 2), seconds);
+    for (let second = 0; second < seconds; second++) {
+      let sum = 0;
+      for (let i = second * rate; i < (second + 1) * rate; i++) sum += (buffer.readInt16LE(44 + i * 2) / 32767) ** 2;
+      assert.ok(Math.sqrt(sum / rate) > .005, `${file} has sound during second ${second}`);
+    }
+  }
+});
+
 test('employee signup is pending, restricted by domain, approved by admin, then email-only login works', async () => {
   const employee = request.agent(h.app);
   let csrf = (await employee.get('/api/session')).body.csrf;

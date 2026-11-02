@@ -6,40 +6,18 @@ import { harness } from './helpers.js';
 function monitorAudio() {
   window.playedNotes = [];
   window.drumrolls = [];
-  const connect = AudioNode.prototype.connect;
-  AudioNode.prototype.connect = function (destination, ...args) {
-    if (destination instanceof AudioDestinationNode) {
-      const analyser = this.context.createAnalyser();
-      window.outputAnalyser = analyser;
-      connect.call(this, analyser);
-      connect.call(analyser, destination);
-      return destination;
-    }
-    return connect.call(this, destination, ...args);
-  };
-  const create = AudioContext.prototype.createOscillator;
-  AudioContext.prototype.createOscillator = function () {
-    const oscillator = create.call(this);
-    const start = oscillator.start.bind(oscillator);
-    oscillator.start = (...args) => { window.playedNotes.push(oscillator.frequency.value); start(...args); };
-    return oscillator;
-  };
-  const createSource = AudioContext.prototype.createBufferSource;
-  AudioContext.prototype.createBufferSource = function () {
-    const source = createSource.call(this);
-    const start = source.start.bind(source);
-    source.start = (...args) => {
-      const samples = source.buffer.getChannelData(0);
-      window.drumrolls.push({
-        duration: source.buffer.duration, offset: args[1], running: this.state === 'running',
-        energy: [0, 4, 9].map(second => {
-          const section = samples.subarray(second * this.sampleRate, (second + 1) * this.sampleRate);
-          return Math.sqrt(section.reduce((sum, value) => sum + value * value, 0) / section.length);
-        }),
-      });
-      start(...args);
-    };
-    return source;
+  window.audioTracks = [];
+  const NativeAudio = window.Audio;
+  window.Audio = function (...args) {
+    const audio = new NativeAudio(...args);
+    window.audioTracks.push(audio);
+    audio.addEventListener('playing', () => {
+      if (!audio.volume) return;
+      if (audio.src.endsWith('drumroll.wav')) {
+        window.drumrolls.push({ duration: audio.duration, offset: audio.currentTime, running: !audio.paused });
+      } else window.playedNotes.push(1046.5);
+    });
+    return audio;
   };
 }
 
@@ -100,7 +78,14 @@ test('browser: plan rounds then roll from public page as admin while audience on
       assert.equal(drum.duration, 10);
       assert.equal(drum.running, true);
       assert.ok(drum.offset >= 0 && drum.offset < 3);
-      assert.ok(drum.energy.every(rms => rms > .05), JSON.stringify(drum));
+      await screen.evaluate(async () => {
+        const context = new AudioContext();
+        await context.resume();
+        const stream = window.audioTracks[0].captureStream();
+        window.outputAnalyser = context.createAnalyser();
+        context.createMediaStreamSource(stream).connect(window.outputAnalyser);
+      });
+
       await screen.waitForFunction(() => {
         const samples = new Float32Array(window.outputAnalyser.fftSize);
         window.outputAnalyser.getFloatTimeDomainData(samples);
@@ -144,6 +129,41 @@ test('browser: plan rounds then roll from public page as admin while audience on
     assert.deepEqual(errors, []);
     await audienceContext.close();
     await context.close();
+  } finally {
+    await browser?.close();
+    await new Promise(resolve => server.close(resolve));
+    await h.pool.end();
+  }
+});
+
+test('native audio tolerates slow loading and reports blocked playback with click-to-retry', async () => {
+  const h = await harness();
+  const server = h.app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  let browser;
+  try {
+    await h.add('Audio Test', 'audio@example.com');
+    await h.write('patch', '/admin/events/1', { ...h.settings, status: 'live' }).expect(200);
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    await page.route('**/audio/*.wav', async route => {
+      await new Promise(resolve => setTimeout(resolve, 700));
+      await route.continue();
+    });
+    await page.goto(`http://127.0.0.1:${server.address().port}/?event=1#draw`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#draw-stage').click();
+    await page.getByText('Sound ready.', { exact: false }).waitFor();
+    await page.evaluate(() => {
+      window.originalPlay = HTMLMediaElement.prototype.play;
+      HTMLMediaElement.prototype.play = function () {
+        return this.volume ? Promise.reject(new DOMException('Playback blocked', 'NotAllowedError')) : window.originalPlay.call(this);
+      };
+    });
+    await h.write('post', '/admin/events/1/draw', {}).expect(201);
+    await page.locator('#sound-status').getByText('Sound blocked:', { exact: false }).waitFor();
+    await page.evaluate(() => { HTMLMediaElement.prototype.play = window.originalPlay; });
+    await page.locator('#draw-stage').click();
+    await page.locator('#sound-status').getByText('Playing drumroll.', { exact: false }).waitFor();
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { harness } from './helpers.js';
 
-test('presentation fits projector and laptop screens with paginated winners and live round control', async () => {
+test('presentation fits projector and laptop screens with internally scrolling winners and live round control', async () => {
   const h = await harness();
   const server = h.app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -41,7 +41,7 @@ test('presentation fits projector and laptop screens with paginated winners and 
       assert.equal(await page.locator('.presentation-logo').evaluate(image => image.complete && image.naturalWidth > 0), true);
       const measurements = await page.evaluate(() => {
         const app = document.querySelector('#app');
-        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages', '[data-action="reset-demo"]'];
+        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.winner-grid', '[data-action="reset-demo"]'];
         return {
           noScroll: app.scrollHeight <= app.clientHeight + 1 && app.scrollWidth <= app.clientWidth + 1,
           visible: targets.every(selector => {
@@ -52,10 +52,15 @@ test('presentation fits projector and laptop screens with paginated winners and 
         };
       });
       assert.deepEqual(measurements, { noScroll: true, visible: true, winnersFit: true }, JSON.stringify(viewport));
+      if (viewport.height === 600) {
+        await page.locator('.winner-grid').evaluate(el => { el.scrollTop = el.scrollHeight; });
+        assert.ok(await page.locator('.winner-grid').evaluate(el => el.scrollTop > 0));
+        await page.locator('.winner-grid').focus();
+        await page.keyboard.press('Home');
+      }
     }
-    assert.equal(await page.locator('#winners-list .winner-item').count(), 8);
-    await page.getByRole('button', { name: 'Next winners' }).click();
-    assert.equal(await page.locator('#winners-list .winner-item').count(), 2);
+    assert.equal(await page.locator('#winners-list .winner-item').count(), 10);
+    assert.equal(await page.getByRole('button', { name: 'Next winners' }).count(), 0);
     assert.ok(await page.getByRole('button', { name: 'Roll Round 2' }).isVisible());
     await page.getByRole('button', { name: 'Exit presentation' }).click();
     await page.waitForFunction(() => !document.fullscreenElement);

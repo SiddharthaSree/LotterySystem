@@ -9,44 +9,65 @@ let polling = false;
 let lastPoll = 0;
 let connectionLost = false;
 let presentation = false;
-let winnerPage = 0;
 let roundPage = 0;
 const initializedCelebrations = new WeakSet();
-let audioContext;
-let audioVolume;
-let drumSource;
-let drumKey;
-let audioErrorReported = false;
+const drumAudio = new Audio('/audio/drumroll.wav');
+const winnerAudio = new Audio('/audio/winner.wav');
+const drawAudio = [drumAudio, winnerAudio];
+drawAudio.forEach(audio => { audio.preload = 'auto'; audio.volume = .9; });
+let audioUnlocked = false;
+let unlockingAudio = false;
+let drumKey = null;
+let soundStatus = 'Sound: click anywhere once to allow audio.';
 const soundedWinners = new Set();
+const winnerMessages = new Map();
+const appreciationMessages = [
+  'Thank you for your dedication to CSI. Your everyday effort helps our whole team move forward.',
+  'Your ideas, kindness, and commitment make CSI a better place to work. Thank you for all you bring.',
+  'Great teams grow through people who care. Thank you for supporting your colleagues and giving your best at CSI.',
+  'Every thoughtful contribution makes a difference. Thank you for helping CSI build something meaningful together.',
+  'Your hard work inspires the people around you. Keep learning, sharing, and shining. We are grateful you are part of CSI.',
+];
+
+function setSoundStatus(message) {
+  soundStatus = message;
+  const label = $('#sound-status');
+  if (label && label.textContent !== message) label.textContent = message;
+}
+
+function audioFailure(error) {
+  audioUnlocked = false;
+  stopDrumroll();
+  winnerAudio.pause();
+  setSoundStatus(error.name === 'NotAllowedError' ?
+    'Sound blocked: click this page and allow sound in your browser site settings.' :
+    'Sound could not play. Check your connection, browser sound permission, and speaker volume.');
+  toast(soundStatus, true);
+}
 
 async function unlockDrawAudio() {
+  if (audioUnlocked || unlockingAudio) return;
+  unlockingAudio = true;
+  setSoundStatus('Preparing sound...');
   try {
-    if (!window.AudioContext) throw new Error('Audio is unavailable in this browser. Use a current version of Chrome or Edge.');
-    if (!audioContext) {
-      audioContext = new AudioContext();
-      audioVolume = audioContext.createGain();
-      audioVolume.gain.value = 0;
-      audioVolume.connect(audioContext.destination);
-    }
-    if (audioContext.state !== 'running') await audioContext.resume();
-    if (audioContext.state !== 'running') throw new Error('Allow sound for this site in your browser settings, then click the page again.');
-    audioErrorReported = false;
+    // Prime both media elements during the user's gesture for later server-timed reveals.
+    await Promise.all(drawAudio.map(async audio => {
+      audio.volume = 0;
+      try { await audio.play(); }
+      finally { audio.pause(); audio.currentTime = 0; audio.volume = .9; }
+    }));
+    audioUnlocked = true;
+    setSoundStatus('Sound ready. If silent, unmute this tab and check speaker volume.');
     updateDrawSound();
-  } catch (error) {
-    if (!audioErrorReported) toast(error.message, true);
-    audioErrorReported = true;
-  }
+  } catch (error) { audioFailure(error); }
+  finally { unlockingAudio = false; }
 }
 
 document.addEventListener('click', unlockDrawAudio, { capture: true });
 document.addEventListener('keydown', unlockDrawAudio, { capture: true });
 
 function stopDrumroll() {
-  if (drumSource) {
-    drumSource.stop();
-    drumSource.disconnect();
-    drumSource = null;
-  }
+  drumAudio.pause();
   drumKey = null;
 }
 
@@ -57,46 +78,17 @@ function startDrumroll(draw) {
   const duration = state.data.reveal_duration_ms / 1000;
   const elapsed = Math.max(0, (serverNow() - draw.reveal_starts_at) / 1000);
   if (elapsed >= duration) return;
-  const rate = audioContext.sampleRate;
-  const buffer = audioContext.createBuffer(1, Math.ceil(duration * rate), rate);
-  const samples = buffer.getChannelData(0);
-  // Accelerating snare hits are scheduled on the audio clock, not the UI timer.
-  for (let hit = 0; hit < duration; hit += .11 - .065 * (hit / duration)) {
-    const end = Math.min(samples.length, Math.floor((hit + .09) * rate));
-    for (let i = Math.floor(hit * rate); i < end; i++) {
-      const age = i / rate - hit;
-      samples[i] += ((Math.random() * 2 - 1) * .65 + Math.sin(age * Math.PI * 2 * 140) * .25) * Math.exp(-age * 55);
-    }
-  }
-  drumSource = audioContext.createBufferSource();
-  drumSource.buffer = buffer;
-  drumSource.connect(audioVolume);
-  drumSource.start(0, elapsed);
+  drumAudio.currentTime = elapsed;
   drumKey = key;
-}
-
-function tone(frequency, delay = 0, duration = .12, volume = .3) {
-  const oscillator = audioContext.createOscillator();
-  const envelope = audioContext.createGain();
-  const start = audioContext.currentTime + delay;
-  oscillator.type = 'triangle';
-  oscillator.frequency.value = frequency;
-  envelope.gain.setValueAtTime(0, start);
-  envelope.gain.linearRampToValueAtTime(volume, start + .01);
-  envelope.gain.exponentialRampToValueAtTime(.001, start + duration);
-  oscillator.connect(envelope);
-  envelope.connect(audioVolume);
-  oscillator.onended = () => { oscillator.disconnect(); envelope.disconnect(); };
-  oscillator.start(start);
-  oscillator.stop(start + duration + .02);
+  drumAudio.play().then(() => setSoundStatus('Playing drumroll. If silent, unmute this tab and check speaker volume.')).catch(audioFailure);
 }
 
 function updateDrawSound() {
-  if (!audioVolume) return;
+  if (unlockingAudio) return;
   const onDraw = route() === 'draw' || (route() === 'admin' && state.tab === 'draw');
-  audioVolume.gain.value = onDraw ? .8 : 0;
-  if (!onDraw || audioContext.state !== 'running' || !state.data) {
+  if (!onDraw || !audioUnlocked || !state.data) {
     stopDrumroll();
+    winnerAudio.pause();
     return;
   }
   const draw = state.data.draws.find(d => d.id === state.data.current_draw_id);
@@ -111,8 +103,8 @@ function updateDrawSound() {
     const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
     if (soundedWinners.has(key)) return;
     soundedWinners.add(key);
-    [523.25, 659.25, 783.99, 1046.5].forEach((note, i) => tone(note, i * .14, .35));
-    [523.25, 659.25, 783.99].forEach(note => tone(note, .65, .6, .08));
+    winnerAudio.currentTime = 0;
+    winnerAudio.play().then(() => setSoundStatus('Playing winner fanfare.')).catch(audioFailure);
   }
 }
 
@@ -216,11 +208,15 @@ function renderEmployee() {
       <button class="primary full" type="submit">${signup ? 'Register for the event' : 'View my tickets'} &rarr;</button></form>`}
     </div></section>`;
   }
-  const { person, tickets, tasks, won, award_pending: awardPending } = state.me;
+  const { person, tickets, tasks, won, winning_ticket_id: winningTicketId, award_pending: awardPending } = state.me;
+  const messageKey = `${event.id}:${person.id}:${winningTicketId}`;
+  if (won && !winnerMessages.has(messageKey)) {
+    winnerMessages.set(messageKey, appreciationMessages[Math.floor(Math.random() * appreciationMessages.length)]);
+  }
   const eligible = person.approved && !won && !awardPending;
   return `<div class="page-heading"><div><p class="eyebrow">Your festive dashboard</p><h1>Hello, ${escape(person.name)}.</h1><p>${escape(person.email)}</p></div>${badge(won ? 'winner' : person.approved ? 'approved' : 'pending approval')}</div>
     ${!person.approved ? '<div class="notice"><strong>Your registration is awaiting admin approval.</strong> Your entry is saved. Contact your coordinator through Teams; tickets become eligible after approval.</div>' : ''}
-    ${won ? `<div class="notice green"><strong>Congratulations! You won ${escape(won)}.</strong> Your prize is reserved, even if you were offline. Contact your coordinator to collect it later. All your tickets are excluded from further draws in this event.</div>` : ''}
+    ${won ? `<section class="golden-ticket" aria-label="Your golden winning ticket"><div><p class="eyebrow">CSI celebrates you</p><h2>Congratulations, ${escape(person.name)}!</h2><p class="golden-prize">You won ${escape(won)}.</p><blockquote>${escape(winnerMessages.get(messageKey))}</blockquote><p class="small">With appreciation, your CSI team</p></div><div class="golden-ticket-stub"><span>YOUR WINNING TICKET</span><strong>${ticketCode(winningTicketId)}</strong><p>${escape(event.title)}</p></div><p class="golden-collection">Your prize is reserved. Contact your coordinator to collect it. One prize per person; your other tickets are excluded from further draws.</p></section>` : ''}
     ${awardPending ? '<div class="notice">A prize has been reserved for you. Watch the live draw for your ticket and name reveal. Your tickets are no longer eligible for another prize.</div>' : ''}
     <div class="stats">${stat(eligible ? tickets.length : 0, 'Eligible tickets')}${stat(1, 'Base ticket')}${stat(Math.max(0, tickets.length - 1), 'Allocated bonus tickets')}${stat(event.bonus_cap, 'Bonus-ticket cap')}</div>
     <div class="card"><h3>Your ticket wallet</h3><p>${eligible ? 'Each of these tickets is linked to your entry and has the same chance in the draw.' : 'Allocated ticket identifiers are shown below for your records; they are not currently eligible for selection.'}</p>
@@ -231,11 +227,7 @@ function renderEmployee() {
 
 function winnersList() {
   const wins = state.data.draws.filter(d => d.status === 'claimed' && !revealing(d)).slice().reverse();
-  const pages = Math.max(1, Math.ceil(wins.length / 8));
-  winnerPage = Math.min(winnerPage, pages - 1);
-  const start = presentation ? winnerPage * 8 : 0;
-  const shown = presentation ? wins.slice(start, start + 8) : wins;
-  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid">${shown.length ? shown.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(start + i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div>${presentation && pages > 1 ? `<div class="presentation-pages"><button class="secondary" data-winner-page="-1" ${winnerPage === 0 ? 'disabled' : ''}>Previous winners</button><span>${winnerPage + 1} / ${pages}</span><button class="secondary" data-winner-page="1" ${winnerPage === pages - 1 ? 'disabled' : ''}>Next winners</button></div>` : ''}</div>`;
+  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid" tabindex="0" role="region" aria-label="Scroll through all winners">${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div></div>`;
 }
 
 function stage() {
@@ -253,7 +245,7 @@ function stage() {
       <p id="reveal-message" role="status" aria-live="polite">Rolling the ticket numbers...</p>
       <p class="helper">Decorative animation &middot; the ticket is already randomly selected</p>
     </div><p>${escape(visible.prize_label)}</p>` :
-      visible ? `<div class="winner-reveal" role="status"><span class="badge">${visible.status === 'claimed' ? 'Prize awarded &middot; congratulations!' : 'Past unawarded selection'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p><p class="helper">${batch?.active ? 'The next winner will roll automatically...' : 'Winners can collect their prizes later. Attendance is not required.'}</p></div>` :
+      visible ? `<div class="winner-reveal" role="status"><span class="badge">${visible.status === 'claimed' ? 'Prize awarded &middot; congratulations!' : 'Past unawarded selection'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p><p class="helper">${batch?.active ? 'The next winner will roll automatically...' : 'Winners can collect their prizes later.'}</p></div>` :
       `<div class="orb" aria-hidden="true">&#10022;</div><h2>${event.status === 'ended' ? 'A celebration to remember.' : 'Your moment is coming.'}</h2><p>${event.status === 'live' ? 'The draw is live. Good luck, everyone!' : 'Grab a seat. The next lucky name could be yours.'}</p>`}
     <p class="helper">${remaining} prize${remaining === 1 ? '' : 's'} remaining &middot; ${state.data.stats.tickets} eligible tickets</p>
   </div>`;
@@ -268,12 +260,12 @@ function drawHelp() {
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
   return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${resetDemoButton()}</div>`}
-    <div class="draw-layout"><div class="draw-main">${stage()}
+    <div class="draw-layout"><div class="draw-main">${stage()}<p class="sound-status" id="sound-status" role="status">${escape(soundStatus)}</p>
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
       <button class="primary full" type="submit" ${event.status !== 'live' || !remaining || state.data.batch?.active || !state.data.stats.tickets ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper" id="draw-roll-help">${drawHelp()}</p></form>` :
       '<p class="helper">This screen updates automatically. Each winning ticket is followed by the employee name. Winners keep their prize even if they are offline.</p>'}</div>${winnersList()}</div>
-    <div class="notice">Every selected winner is automatically awarded one prize. Attendance and separate confirmation are not required; prizes can be collected later. All other tickets belonging to a winner are excluded immediately, including within the same roll.</div>
+    <div class="notice">Every selected winner is automatically awarded one prize, which can be collected later. All other tickets belonging to a winner are excluded immediately, including within the same roll.</div>
     ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export winners (CSV)</a></div>${drawHistory()}` : ''}`;
 }
 
@@ -373,10 +365,12 @@ function renderAdmin() {
 }
 
 function render() {
+  const winnersScroll = $('.winner-grid')?.scrollTop || 0;
   updateHeader();
   $('#app').classList.toggle('presentation', presentation);
   const page = route();
   $('#app').innerHTML = page === 'employee' ? renderEmployee() : page === 'admin' ? renderAdmin() : page === 'draw' ? renderDraw() : renderHome();
+  if ($('.winner-grid')) $('.winner-grid').scrollTop = winnersScroll;
 }
 
 async function refresh() {
@@ -448,12 +442,10 @@ document.addEventListener('click', event => {
   if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
-  else if (button.dataset.winnerPage) { winnerPage += Number(button.dataset.winnerPage); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
   else if (button.dataset.action === 'reset-demo') action(async () => {
     if (!confirm('Reset this demo? Its winners and round progress will be cleared. Employees, tickets, and round settings stay unchanged. Real events are not affected.')) return;
     await api(adminPath('/reset-demo'), 'POST', { confirm: true });
-    winnerPage = 0;
     roundPage = 0;
     await refresh();
     toast('Demo reset. Ready to roll Round 1 again.');
@@ -593,7 +585,9 @@ async function pollLiveData() {
       if (!input) render();
       else if ($('#draw-stage')) {
         $('#draw-stage').outerHTML = stage();
+        const winnersScroll = $('.winner-grid').scrollTop;
         $('#winners-list').outerHTML = winnersList();
+        $('.winner-grid').scrollTop = winnersScroll;
         if ($('#round-controls')) $('#round-controls').outerHTML = roundControls();
         const roll = $('[data-form="draw"] button');
         if (roll) {
@@ -619,7 +613,6 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('focus', pollLiveData);
 document.addEventListener('fullscreenchange', () => {
   presentation = document.fullscreenElement === $('#app');
-  winnerPage = 0;
   roundPage = Math.max(0, Math.floor((state.data?.rounds.findIndex(round => !round.rolled_at) || 0) / 3));
   if (state.data) render();
 });

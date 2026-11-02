@@ -111,7 +111,16 @@ test('browser: registration, verification, batch awards and sequential synchroni
     assert.equal(await audience.locator('#winners-list .winner-item').count(), 2);
     assert.equal(await admin.getByRole('button', { name: 'Roll & reveal' }).isDisabled(), true);
     await page.reload();
-    await page.getByText('Congratulations! You won A festive hamper.', { exact: true }).waitFor();
+    await page.getByRole('region', { name: 'Your golden winning ticket' }).waitFor();
+    await page.locator('.golden-ticket').getByText('You won A festive hamper.', { exact: true }).waitFor();
+    const employeeDraw = selection.draws.find(draw => draw.person_id === names.find(p => p.name === 'Browser Employee').id);
+    assert.equal(await page.locator('.golden-ticket-stub strong').textContent(), `CSI-${String(employeeDraw.ticket_id).padStart(6, '0')}`);
+    assert.ok((await page.locator('.golden-ticket blockquote').textContent()).includes('CSI'));
+    const message = await page.locator('.golden-ticket blockquote').textContent();
+    await page.getByRole('link', { name: 'Home', exact: true }).click();
+    await page.getByRole('link', { name: 'My tickets', exact: true }).click();
+    assert.equal(await page.locator('.golden-ticket blockquote').textContent(), message);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await audience.goto(`${base}/?event=1#draw`);
     await audience.getByText('Prize awarded', { exact: false }).first().waitFor();
     assert.equal(await audience.getByText('browser@gmail.com', { exact: true }).count(), 0);

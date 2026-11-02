@@ -125,3 +125,25 @@ test('only admins can reset designated demos, preserving tickets, plans, audit h
     await h.write('post', `${root}/rounds/${reset.rounds[0].id}/roll`, {}).expect(201);
   } finally { await h.pool.end(); }
 });
+
+test('employee golden ticket exposes the winning number only after reveal, not another allocated ticket', async () => {
+  const h = await harness();
+  try {
+    const person = await h.add('Golden Winner', 'golden@example.com');
+    await h.write('patch', '/admin/events/1', { ...h.settings, status: 'live' }).expect(200);
+    const draw = (await h.write('post', '/admin/events/1/draw', {}).expect(201)).body.draws[0];
+    const employee = request.agent(h.app);
+    const csrf = (await employee.get('/api/session')).body.csrf;
+    await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: person.email }).expect(200);
+    const pending = (await employee.get('/api/me').expect(200)).body;
+    assert.equal(pending.winning_ticket_id, null);
+    assert.equal(pending.won, null);
+    await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [draw.id]);
+    const winner = (await employee.get('/api/me').expect(200)).body;
+    assert.equal(String(winner.winning_ticket_id), String(draw.ticket_id));
+    assert.equal(winner.won, draw.prize_label);
+    await h.pool.query('UPDATE events SET is_demo=TRUE WHERE id=1');
+    await h.write('post', '/admin/events/1/reset-demo', { confirm: true }).expect(200);
+    assert.equal((await employee.get('/api/me')).body.winning_ticket_id, null);
+  } finally { await h.pool.end(); }
+});
