@@ -161,7 +161,7 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div>` : ''}
+  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div>` : ''}
     <div class="draw-layout"><div class="draw-main">${stage()}
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}

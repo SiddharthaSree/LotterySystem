@@ -2,6 +2,8 @@
 
 A reusable employee engagement portal with a public audience screen, employee dashboards, and a password-protected coordinator panel. Built with Node.js, Express, plain browser JavaScript, and PostgreSQL. There is no frontend build step.
 
+The supplied CSI Solution logo is displayed in the portal header and the fullscreen draw presentation. Its original artwork and proportions are preserved in `public/company-logo.png`.
+
 ## What is included
 
 - Name/email registration, allowed email domains, manual approval, and an IST registration deadline.

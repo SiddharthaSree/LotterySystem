@@ -25,7 +25,8 @@ button:disabled { cursor: wait; opacity: .6; }
 .site-header { max-width: 1440px; margin: auto; padding: 24px 5%; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .brand { display: flex; gap: 12px; align-items: center; font-weight: 800; letter-spacing: 2px; font-size: 15px; color: var(--wine); }
 .brand:hover { text-decoration: none; }
-.brand-mark { display: grid; place-items: center; background: var(--wine); color: var(--gold); border-radius: 13px; width: 45px; height: 45px; font-size: 30px; }
+.company-logo { display: block; width: 155px; height: auto; object-fit: contain; background: white; border-radius: 6px; flex-shrink: 0; }
+.presentation-logo { display: none; }
 .brand-sub { display: block; font-size: 10px; letter-spacing: .3px; color: var(--muted); font-weight: 500; }
 nav { display: flex; align-items: center; gap: 27px; }
 nav a { font-size: 13px; font-weight: 600; color: var(--muted); }
@@ -224,6 +225,8 @@ main.presentation {
 .presentation > .page-heading .eyebrow, .presentation > .page-heading p:not(.eyebrow),
 .presentation > .notice { display: none; }
 .presentation > .page-heading h1 { margin: 0; font-size: 24px; }
+.presentation .draw-heading { display: flex; align-items: center; gap: 18px; min-width: 0; }
+.presentation .presentation-logo { display: block; width: 140px; }
 .presentation .draw-layout { min-height: 0; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); align-items: stretch; gap: 16px; }
 .presentation .draw-main { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
 .presentation .draw-stage { flex: 1; min-height: 0; padding: 15px 20px; border-radius: 16px; }

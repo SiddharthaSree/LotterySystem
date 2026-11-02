@@ -37,6 +37,7 @@ test('presentation fits projector and laptop screens with paginated winners and 
       await page.setViewportSize(viewport);
       await page.getByRole('button', { name: 'Presentation mode' }).click();
       await page.waitForFunction(() => document.fullscreenElement?.classList.contains('presentation'));
+      assert.equal(await page.locator('.presentation-logo').evaluate(image => image.complete && image.naturalWidth > 0), true);
       const measurements = await page.evaluate(() => {
         const app = document.querySelector('#app');
         const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages'];

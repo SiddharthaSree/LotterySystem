@@ -206,6 +206,8 @@ test('public HTML and static assets are served with protective headers', async (
   assert.ok(response.headers['content-security-policy'].includes("script-src 'self'"));
   await request(h.app).get('/app.js').expect(200);
   await request(h.app).get('/styles.css').expect(200);
+  const logo = await request(h.app).get('/company-logo.png').expect(200);
+  assert.ok(logo.headers['content-type'].startsWith('image/png'));
   await request(h.app).get('/healthz').expect(200);
   await request(h.app).get('/.env').expect(404);
 });
