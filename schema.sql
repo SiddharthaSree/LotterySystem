@@ -55,6 +55,19 @@ ALTER TABLE draws ADD COLUMN IF NOT EXISTS batch_id UUID;
 ALTER TABLE draws ADD COLUMN IF NOT EXISTS reveal_at TIMESTAMPTZ;
 ALTER TABLE draws ADD COLUMN IF NOT EXISTS requested_count INTEGER NOT NULL DEFAULT 1 CHECK (requested_count BETWEEN 1 AND 1000);
 CREATE INDEX IF NOT EXISTS draws_event_reveal ON draws(event_id, reveal_at);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS rounds_locked_at TIMESTAMPTZ;
+CREATE TABLE IF NOT EXISTS rounds (
+  id SERIAL PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  position INTEGER NOT NULL CHECK (position BETWEEN 1 AND 100),
+  name TEXT NOT NULL,
+  prize_label TEXT NOT NULL,
+  winner_count INTEGER NOT NULL CHECK (winner_count BETWEEN 1 AND 1000),
+  awarded_count INTEGER CHECK (awarded_count BETWEEN 0 AND 1000),
+  batch_id UUID,
+  rolled_at TIMESTAMPTZ,
+  UNIQUE (event_id, position)
+);
 CREATE TABLE IF NOT EXISTS audit_log (
   id BIGSERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL REFERENCES events(id),

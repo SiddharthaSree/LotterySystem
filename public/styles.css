@@ -147,6 +147,11 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .winner-item strong { font-size: 13px; }
 .winner-item p { font-size: 11px; margin: 3px 0 0; color: var(--muted); }
 .winner-item .badge { margin-left: auto; }
+.round-controls { margin-top: 20px; }
+.round-summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.round-summary p { margin: 4px 0 0; }
+.round-editor { display: grid; grid-template-columns: 1fr 1.4fr .7fr auto; align-items: end; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line); margin-bottom: 15px; }
+.round-editor label.field { margin-bottom: 0; }
 .empty-state { padding: 60px 24px; text-align: center; }
 .empty-state h1 { font-size: 27px; margin-top: 20px; }
 .empty-state p { color: var(--muted); font-size: 13px; }
@@ -188,6 +193,7 @@ main:fullscreen { background: var(--paper); overflow-y: auto; max-width: none; w
   .stat { padding: 16px; }
   .stat strong { font-size: 26px; }
   .grid, .two-col, .auth-layout, .steps { grid-template-columns: 1fr; }
+  .round-editor { grid-template-columns: 1fr; }
   .auth-layout { margin: 0; gap: 15px; }
   .auth-intro { padding: 0; }
   .card { padding: 21px; }

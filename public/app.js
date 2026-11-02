@@ -48,7 +48,7 @@ function settingsFields(event) {
     <div class="span-two">${field('signup_closes_at', 'Public registration closes (IST)', cutoffInput(event.signup_closes_at), 'datetime-local', 'required')}</div>
     <div class="span-two">${field('allowed_domains', 'Allowed signup email domains (comma-separated)', event.allowed_domains, 'text', 'required maxlength="500"')}</div>
     ${field('bonus_cap', 'Bonus-ticket cap per employee', event.bonus_cap, 'number', 'min="0" max="100" required')}
-    ${field('prize_count', 'Number of prizes', event.prize_count, 'number', 'min="1" max="1000" required')}
+    ${field('prize_count', 'Number of prizes', event.prize_count, 'number', `min="1" max="1000" required ${event.rounds_managed ? 'readonly' : ''}`)}
   </div>`;
 }
 
@@ -156,12 +156,43 @@ function renderDraw(admin = false) {
   const { event, remaining } = state.data;
   return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">Presentation mode &#8599;</button></div>` : ''}
     <div class="draw-layout"><div>${stage()}
-    ${admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
+    ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
       <button class="primary full" type="submit" ${event.status !== 'live' || !remaining || state.data.batch?.active || !state.data.stats.tickets ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper" id="draw-roll-help">${drawHelp()}</p></form>` :
       '<p class="helper">This screen updates automatically. Each winning ticket is followed by the employee name. Winners keep their prize even if they are offline.</p>'}</div>${winnersList()}</div>
     <div class="notice">Every selected winner is automatically awarded one prize. Attendance and separate confirmation are not required; prizes can be collected later. All other tickets belonging to a winner are excluded immediately, including within the same roll.</div>
     ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export winners (CSV)</a></div>${drawHistory()}` : ''}`;
+}
+
+function roundControls() {
+  const { event, rounds, batch } = state.data;
+  const next = rounds.find(round => !round.rolled_at);
+  return `<section class="card round-controls" id="round-controls"><p class="eyebrow">Planned rounds</p>
+    ${rounds.map(round => `<div class="round-summary"><div><strong>${escape(round.name)}</strong><p>${escape(round.prize_label)} &middot; ${round.winner_count} planned winner${round.winner_count === 1 ? '' : 's'}</p>
+      ${round.rolled_at ? `<p>${round.awarded_count} awarded${round.awarded_count < round.winner_count ? ` &middot; ${round.winner_count - round.awarded_count} unfilled (not enough eligible employees)` : ''}</p>` : ''}</div>
+      ${badge(round.rolled_at ? batch?.active && round.batch_id === batch.id ? 'revealing' : 'complete' : next?.id === round.id ? 'next' : 'upcoming')}</div>`).join('')}
+    ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active ? 'disabled' : ''}>Roll ${escape(next.name)} &rarr;</button>` : ''}
+      <p class="helper">${batch?.active ? 'Watch this round finish revealing before the next roll.' : event.status !== 'live' ? 'The coordinator will start the event soon.' : `Next: ${escape(next.name)}. ${state.session.admin ? 'The saved prize and winner count will be used automatically.' : 'Waiting for the coordinator to roll.'}`}</p>` :
+      `<p class="notice green">${batch?.active ? 'The final round is revealing.' : 'All rounds are complete.'}</p>`}
+    </section>`;
+}
+
+function roundRow(round = {}) {
+  return `<div class="round-editor" data-round-row>
+    ${field('round_name', 'Round name', round.name || '', 'text', 'required maxlength="160"')}
+    ${field('round_prize', 'Round prize', round.prize_label || '', 'text', 'required maxlength="160"')}
+    ${field('round_winners', 'Round winners', round.winner_count || 1, 'number', 'min="1" max="1000" required')}
+    <button class="secondary" type="button" data-action="remove-round">Remove round</button></div>`;
+}
+
+function roundPlanner() {
+  const { event, draws, rounds } = state.data;
+  const locked = event.status !== 'open' || event.rounds_locked_at || draws.length;
+  return `<section class="card"><h2>Round planner</h2><p class="muted small">Set round names, prizes, and winner counts in order. The total becomes the event prize count. Save the plan before going Live; it then locks permanently, even if you return the event to Open.</p>
+    ${locked ? `<div class="notice">The plan cannot be changed after going Live or after any draw. ${rounds.length ? 'Run the saved rounds from the public draw page while signed in as an admin.' : 'This event keeps its existing manual batch draw. Use a new event for planned rounds.'}</div>${rounds.length ? roundControls() : ''}` :
+      `<form data-form="round-plan"><div id="round-editor-rows">${(rounds.length ? rounds : [{ name: 'Round 1', winner_count: 1 }]).map(roundRow).join('')}</div>
+      <div class="actions"><button type="button" class="secondary" data-action="add-round">Add round</button><button class="primary">Save round plan</button></div><p class="helper">Maximum 100 rounds and 1000 total prizes. If a round has too few eligible employees, available winners are awarded and the remaining prizes are recorded as unfilled.</p></form>`}
+  </section>`;
 }
 
 function drawHistory() {
@@ -197,10 +228,10 @@ function renderTasks() {
 
 function renderSettings() {
   const event = state.data.event;
-  return `<div class="two-col"><form data-form="settings" class="card"><h2>Event settings</h2>${settingsFields(event)}
+  return `${roundPlanner()}<div class="two-col"><form data-form="settings" class="card"><h2>Event settings</h2>${settingsFields({ ...event, rounds_managed: state.data.rounds.length > 0 })}
     <label class="field">Event status<select name="status"><option value="open" ${event.status === 'open' ? 'selected' : ''}>Open - registration &amp; activities</option><option value="live" ${event.status === 'live' ? 'selected' : ''}>Live - draw enabled</option><option value="ended" ${event.status === 'ended' ? 'selected' : ''}>Ended - read-only archive</option></select></label>
     <div class="notice">Tickets can be updated while Open or Live. Ending an event locks its records permanently. Wait for any winner reveals to finish first.</div><button class="primary" ${event.status === 'ended' ? 'disabled' : ''}>Save event settings</button></form>
-    <div><form data-form="new-event" class="card"><p class="eyebrow">Made for your next celebration</p><h2>Create a new event</h2><p class="muted small">Start fresh with demo tasks. Employees, tickets, and winners remain separate for every event.</p>${settingsFields({ ...event, title: 'Our next lucky draw', signup_closes_at: new Date(Date.now() + 7 * 86400000).toISOString() })}<button class="primary">Create new event</button></form>
+    <div><form data-form="new-event" class="card"><p class="eyebrow">Made for your next celebration</p><h2>Create a new event</h2><p class="muted small">Start fresh with demo tasks. Save a round plan in Settings after creating the event, before going Live.</p>${settingsFields({ ...event, title: 'Our next lucky draw', signup_closes_at: new Date(Date.now() + 7 * 86400000).toISOString() })}<button class="primary">Create new event</button></form>
     <div class="notice">Email-only employee access is intentionally lightweight: anyone who knows an approved address can open that employee dashboard. Admin actions always require the admin password.</div></div></div>`;
 }
 
@@ -262,6 +293,14 @@ document.addEventListener('submit', event => {
       await api('/admin/login', 'POST', body);
       state.session = await api('/session');
     } else if (type === 'settings') await api(adminPath(), 'PATCH', body);
+    else if (type === 'round-plan') {
+      body.rounds = [...form.querySelectorAll('[data-round-row]')].map(row => ({
+        name: row.querySelector('[name="round_name"]').value,
+        prize_label: row.querySelector('[name="round_prize"]').value,
+        winner_count: row.querySelector('[name="round_winners"]').value,
+      }));
+      await api(adminPath('/rounds'), 'PUT', { rounds: body.rounds });
+    }
     else if (type === 'new-event') {
       const newEvent = await api('/admin/events', 'POST', body);
       state.eventId = newEvent.id;
@@ -286,6 +325,20 @@ document.addEventListener('click', event => {
   if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
+  else if (button.dataset.rollRound) action(async () => {
+    const result = await api(adminPath(`/rounds/${button.dataset.rollRound}/roll`), 'POST', {});
+    await refresh();
+    toast(`${result.round_name}: ${result.winner_count} awarded of ${result.requested_count} planned${result.reduced ? `; ${result.requested_count - result.winner_count} unfilled` : ''}.`);
+  });
+  else if (button.dataset.action === 'add-round') {
+    const count = document.querySelectorAll('[data-round-row]').length;
+    if (count >= 100) return toast('An event can have at most 100 rounds.', true);
+    $('#round-editor-rows').insertAdjacentHTML('beforeend', roundRow({ name: `Round ${count + 1}` }));
+  }
+  else if (button.dataset.action === 'remove-round') {
+    if (document.querySelectorAll('[data-round-row]').length <= 1) return toast('Keep at least one round in the plan.', true);
+    button.closest('[data-round-row]').remove();
+  }
   else if (button.dataset.action === 'refresh') action(refresh);
   else if (button.dataset.action === 'fullscreen') {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -400,6 +453,7 @@ async function pollLiveData() {
       else if ($('#draw-stage')) {
         $('#draw-stage').outerHTML = stage();
         $('#winners-list').outerHTML = winnersList();
+        if ($('#round-controls')) $('#round-controls').outerHTML = roundControls();
         const roll = $('[data-form="draw"] button');
         if (roll) {
           roll.disabled = state.data.event.status !== 'live' || !state.data.remaining || state.data.batch?.active || !state.data.stats.tickets;
