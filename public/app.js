@@ -14,15 +14,68 @@ let roundPage = 0;
 const initializedCelebrations = new WeakSet();
 let audioContext;
 let audioVolume;
-let soundEnabled = false;
-let lastRollSound = 0;
+let drumSource;
+let drumKey;
+let audioErrorReported = false;
 const soundedWinners = new Set();
 
-function soundButton() {
-  return `<button class="secondary" type="button" data-action="sound" aria-pressed="${soundEnabled}">${soundEnabled ? 'Mute sound' : 'Enable sound'}</button>`;
+async function unlockDrawAudio() {
+  try {
+    if (!window.AudioContext) throw new Error('Audio is unavailable in this browser. Use a current version of Chrome or Edge.');
+    if (!audioContext) {
+      audioContext = new AudioContext();
+      audioVolume = audioContext.createGain();
+      audioVolume.gain.value = 0;
+      audioVolume.connect(audioContext.destination);
+    }
+    if (audioContext.state !== 'running') await audioContext.resume();
+    if (audioContext.state !== 'running') throw new Error('Allow sound for this site in your browser settings, then click the page again.');
+    audioErrorReported = false;
+    updateDrawSound();
+  } catch (error) {
+    if (!audioErrorReported) toast(error.message, true);
+    audioErrorReported = true;
+  }
 }
 
-function tone(frequency, delay = 0, duration = .12, volume = .15) {
+document.addEventListener('click', unlockDrawAudio, { capture: true });
+document.addEventListener('keydown', unlockDrawAudio, { capture: true });
+
+function stopDrumroll() {
+  if (drumSource) {
+    drumSource.stop();
+    drumSource.disconnect();
+    drumSource = null;
+  }
+  drumKey = null;
+}
+
+function startDrumroll(draw) {
+  const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
+  if (drumKey === key) return;
+  stopDrumroll();
+  const duration = state.data.reveal_duration_ms / 1000;
+  const elapsed = Math.max(0, (serverNow() - draw.reveal_starts_at) / 1000);
+  if (elapsed >= duration) return;
+  const rate = audioContext.sampleRate;
+  const buffer = audioContext.createBuffer(1, Math.ceil(duration * rate), rate);
+  const samples = buffer.getChannelData(0);
+  // Accelerating snare hits are scheduled on the audio clock, not the UI timer.
+  for (let hit = 0; hit < duration; hit += .11 - .065 * (hit / duration)) {
+    const end = Math.min(samples.length, Math.floor((hit + .09) * rate));
+    for (let i = Math.floor(hit * rate); i < end; i++) {
+      const age = i / rate - hit;
+      samples[i] += ((Math.random() * 2 - 1) * .65 + Math.sin(age * Math.PI * 2 * 140) * .25) * Math.exp(-age * 55);
+    }
+  }
+  drumSource = audioContext.createBufferSource();
+  drumSource.buffer = buffer;
+  drumSource.connect(audioVolume);
+  drumSource.start(0, elapsed);
+  drumKey = key;
+}
+
+function tone(frequency, delay = 0, duration = .12, volume = .3) {
   const oscillator = audioContext.createOscillator();
   const envelope = audioContext.createGain();
   const start = audioContext.currentTime + delay;
@@ -41,17 +94,20 @@ function tone(frequency, delay = 0, duration = .12, volume = .15) {
 function updateDrawSound() {
   if (!audioVolume) return;
   const onDraw = route() === 'draw' || (route() === 'admin' && state.tab === 'draw');
-  audioVolume.gain.value = soundEnabled && onDraw ? .4 : 0;
-  if (!soundEnabled || !onDraw || audioContext.state !== 'running' || !state.data) return;
+  audioVolume.gain.value = onDraw ? .8 : 0;
+  if (!onDraw || audioContext.state !== 'running' || !state.data) {
+    stopDrumroll();
+    return;
+  }
   const draw = state.data.draws.find(d => d.id === state.data.current_draw_id);
-  if (!draw) return;
+  if (!draw) { stopDrumroll(); return; }
   const now = serverNow();
   if (revealing(draw) && now >= draw.reveal_starts_at && now < draw.reveal_ends_at) {
-    if (performance.now() - lastRollSound > 180) {
-      tone(180 + Math.floor(Math.random() * 5) * 55, 0, .05, .1);
-      lastRollSound = performance.now();
-    }
-  } else if (draw.status === 'claimed' && draw.name && now >= draw.reveal_ends_at && now - draw.reveal_ends_at < 3000) {
+    startDrumroll(draw);
+    return;
+  }
+  stopDrumroll();
+  if (draw.status === 'claimed' && draw.name && now >= draw.reveal_ends_at && now - draw.reveal_ends_at < 3000) {
     const key = `${state.eventId}:${draw.id}:${draw.reveal_ends_at}`;
     if (soundedWinners.has(key)) return;
     soundedWinners.add(key);
@@ -211,7 +267,7 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${soundButton()}${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${soundButton()}${resetDemoButton()}</div>`}
+  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${resetDemoButton()}</div>`}
     <div class="draw-layout"><div class="draw-main">${stage()}
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
@@ -394,28 +450,6 @@ document.addEventListener('click', event => {
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
   else if (button.dataset.winnerPage) { winnerPage += Number(button.dataset.winnerPage); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
-  else if (button.dataset.action === 'sound') action(async () => {
-    if (soundEnabled) {
-      soundEnabled = false;
-      audioVolume.gain.value = 0;
-    } else {
-      if (!window.AudioContext) throw new Error('Sound is unavailable in this browser. Try a current version of Chrome or Edge.');
-      if (!audioContext) {
-        audioContext = new AudioContext();
-        audioVolume = audioContext.createGain();
-        audioVolume.gain.value = 0;
-        audioVolume.connect(audioContext.destination);
-      }
-      await audioContext.resume();
-      if (audioContext.state !== 'running') throw new Error('Audio is blocked. Allow sound for this site and try again.');
-      soundEnabled = true;
-      audioVolume.gain.value = .4;
-      tone(659.25, 0, .15);
-      tone(783.99, .15, .2);
-      toast('Sound enabled for this tab. Use only one speaker tab to avoid echoes.');
-    }
-    render();
-  });
   else if (button.dataset.action === 'reset-demo') action(async () => {
     if (!confirm('Reset this demo? Its winners and round progress will be cleared. Employees, tickets, and round settings stay unchanged. Real events are not affected.')) return;
     await api(adminPath('/reset-demo'), 'POST', { confirm: true });
