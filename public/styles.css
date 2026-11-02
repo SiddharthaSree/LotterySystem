@@ -160,7 +160,7 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .toast.error { background: #9c2c3c; }
 footer { border-top: 1px solid var(--line); padding: 23px 5%; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: var(--muted); }
 .audit-details { max-width: 420px; overflow-wrap: anywhere; font: 11px Consolas, monospace; }
-main:fullscreen { background: var(--paper); overflow-y: auto; max-width: none; width: 100%; }
+main:fullscreen { background: var(--paper); max-width: none; width: 100%; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes breathe { 50% { transform: scale(1.13) rotate(15deg); } }
 @keyframes reel-roll { to { transform: translateY(-3px); opacity: .6; } }
@@ -210,4 +210,57 @@ main:fullscreen { background: var(--paper); overflow-y: auto; max-width: none; w
   .reel-digit { height: 49px; }
   .section-heading { align-items: start; flex-direction: column; gap: 8px; }
   footer { flex-direction: column; gap: 5px; }
+}
+main.presentation {
+  height: 100dvh;
+  min-height: 0;
+  padding: 16px 22px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 12px;
+  overflow: hidden;
+}
+.presentation > .page-heading { margin: 0; flex-direction: row; align-items: center; }
+.presentation > .page-heading .eyebrow, .presentation > .page-heading p:not(.eyebrow),
+.presentation > .notice { display: none; }
+.presentation > .page-heading h1 { margin: 0; font-size: 24px; }
+.presentation .draw-layout { min-height: 0; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); align-items: stretch; gap: 16px; }
+.presentation .draw-main { min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+.presentation .draw-stage { flex: 1; min-height: 0; padding: 15px 20px; border-radius: 16px; }
+.presentation .draw-stage h2 { font-size: clamp(26px, 4vw, 48px); margin: 10px 0; }
+.presentation .draw-stage p { margin-bottom: 8px; }
+.presentation .draw-stage .eyebrow { font-size: 11px; margin-bottom: 8px; }
+.presentation .draw-stage .helper, .presentation .draw-main > .helper { display: none; }
+.presentation .draw-stage .orb { font-size: 50px; }
+.presentation .ticket-reels { margin: 16px 0; }
+.presentation .reel-digit { height: 54px; }
+.presentation .card { padding: 15px; }
+.presentation .round-controls { margin: 0; flex-shrink: 0; }
+.presentation .round-controls > .eyebrow { margin-bottom: 5px; }
+.presentation .round-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.presentation .round-summary { display: block; min-width: 0; margin-bottom: 8px; padding: 5px 0; font-size: 12px; }
+.presentation .round-summary p { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.presentation .round-summary strong { overflow-wrap: anywhere; }
+.presentation .round-summary .badge { margin-top: 5px; font-size: 9px; }
+.presentation .round-controls > .helper { font-size: 11px; margin-top: 5px; }
+.presentation .round-controls .notice { margin: 5px 0 0; padding: 8px; }
+.presentation #winners-list { min-height: 0; display: flex; flex-direction: column; }
+.presentation #winners-list > .eyebrow { margin-bottom: 8px; }
+.presentation #winners-list h3 { margin-bottom: 8px; }
+.presentation .winner-grid { display: grid; grid-template-rows: repeat(8, minmax(0, 1fr)); flex: 1; min-height: 0; }
+.presentation .winner-item { min-height: 0; padding: 6px 0; gap: 8px; }
+.presentation .winner-item > div { min-width: 0; }
+.presentation .winner-item strong { font-size: 13px; overflow-wrap: anywhere; line-height: 1.2; display: block; }
+.presentation .winner-item p { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+.presentation .winner-rank { width: 26px; height: 26px; font-size: 11px; }
+.presentation-pages { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; }
+.presentation-pages button.secondary { font-size: 10px; padding: 5px 7px; }
+@media (max-height: 650px) {
+  main.presentation { padding: 10px 14px; gap: 8px; }
+  .presentation .draw-stage h2 { font-size: 28px; }
+  .presentation .card { padding: 10px; }
+  .presentation .draw-stage .eyebrow { font-size: 10px; }
+  .presentation .round-controls > .helper { display: none; }
+  .presentation .ticket-reels { margin: 10px 0; }
+  .presentation .reel-digit { height: 40px; font-size: 26px; }
 }

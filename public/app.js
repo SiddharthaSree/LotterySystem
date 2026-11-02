@@ -8,6 +8,9 @@ let serverClock = { time: Date.now(), received: performance.now() };
 let polling = false;
 let lastPoll = 0;
 let connectionLost = false;
+let presentation = false;
+let winnerPage = 0;
+let roundPage = 0;
 
 async function api(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -124,7 +127,11 @@ function renderEmployee() {
 
 function winnersList() {
   const wins = state.data.draws.filter(d => d.status === 'claimed' && !revealing(d)).slice().reverse();
-  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners</h3>${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div>`;
+  const pages = Math.max(1, Math.ceil(wins.length / 8));
+  winnerPage = Math.min(winnerPage, pages - 1);
+  const start = presentation ? winnerPage * 8 : 0;
+  const shown = presentation ? wins.slice(start, start + 8) : wins;
+  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid">${shown.length ? shown.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(start + i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div>${presentation && pages > 1 ? `<div class="presentation-pages"><button class="secondary" data-winner-page="-1" ${winnerPage === 0 ? 'disabled' : ''}>Previous winners</button><span>${winnerPage + 1} / ${pages}</span><button class="secondary" data-winner-page="1" ${winnerPage === pages - 1 ? 'disabled' : ''}>Next winners</button></div>` : ''}</div>`;
 }
 
 function stage() {
@@ -154,8 +161,8 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">Presentation mode &#8599;</button></div>` : ''}
-    <div class="draw-layout"><div>${stage()}
+  return `${!admin ? `<div class="page-heading"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div><button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div>` : ''}
+    <div class="draw-layout"><div class="draw-main">${stage()}
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
       <button class="primary full" type="submit" ${event.status !== 'live' || !remaining || state.data.batch?.active || !state.data.stats.tickets ? 'disabled' : ''}>Roll &amp; reveal &rarr;</button><p class="helper" id="draw-roll-help">${drawHelp()}</p></form>` :
@@ -167,10 +174,14 @@ function renderDraw(admin = false) {
 function roundControls() {
   const { event, rounds, batch } = state.data;
   const next = rounds.find(round => !round.rolled_at);
+  const pages = Math.max(1, Math.ceil(rounds.length / 3));
+  roundPage = Math.min(roundPage, pages - 1);
+  const shown = presentation ? rounds.slice(roundPage * 3, roundPage * 3 + 3) : rounds;
   return `<section class="card round-controls" id="round-controls"><p class="eyebrow">Planned rounds</p>
-    ${rounds.map(round => `<div class="round-summary"><div><strong>${escape(round.name)}</strong><p>${escape(round.prize_label)} &middot; ${round.winner_count} planned winner${round.winner_count === 1 ? '' : 's'}</p>
+    <div class="round-grid">${shown.map(round => `<div class="round-summary"><div><strong>${escape(round.name)}</strong><p>${escape(round.prize_label)} &middot; ${round.winner_count} planned winner${round.winner_count === 1 ? '' : 's'}</p>
       ${round.rolled_at ? `<p>${round.awarded_count} awarded${round.awarded_count < round.winner_count ? ` &middot; ${round.winner_count - round.awarded_count} unfilled (not enough eligible employees)` : ''}</p>` : ''}</div>
-      ${badge(round.rolled_at ? batch?.active && round.batch_id === batch.id ? 'revealing' : 'complete' : next?.id === round.id ? 'next' : 'upcoming')}</div>`).join('')}
+      ${badge(round.rolled_at ? batch?.active && round.batch_id === batch.id ? 'revealing' : 'complete' : next?.id === round.id ? 'next' : 'upcoming')}</div>`).join('')}</div>
+    ${presentation && pages > 1 ? `<div class="presentation-pages"><button class="secondary" data-round-page="-1" ${roundPage === 0 ? 'disabled' : ''}>Previous rounds</button><span>${roundPage + 1} / ${pages}</span><button class="secondary" data-round-page="1" ${roundPage === pages - 1 ? 'disabled' : ''}>Next rounds</button></div>` : ''}
     ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active ? 'disabled' : ''}>Roll ${escape(next.name)} &rarr;</button>` : ''}
       <p class="helper">${batch?.active ? 'Watch this round finish revealing before the next roll.' : event.status !== 'live' ? 'The coordinator will start the event soon.' : `Next: ${escape(next.name)}. ${state.session.admin ? 'The saved prize and winner count will be used automatically.' : 'Waiting for the coordinator to roll.'}`}</p>` :
       `<p class="notice green">${batch?.active ? 'The final round is revealing.' : 'All rounds are complete.'}</p>`}
@@ -252,6 +263,7 @@ function renderAdmin() {
 
 function render() {
   updateHeader();
+  $('#app').classList.toggle('presentation', presentation);
   const page = route();
   $('#app').innerHTML = page === 'employee' ? renderEmployee() : page === 'admin' ? renderAdmin() : page === 'draw' ? renderDraw() : renderHome();
 }
@@ -325,6 +337,8 @@ document.addEventListener('click', event => {
   if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
+  else if (button.dataset.winnerPage) { winnerPage += Number(button.dataset.winnerPage); render(); }
+  else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
   else if (button.dataset.rollRound) action(async () => {
     const result = await api(adminPath(`/rounds/${button.dataset.rollRound}/roll`), 'POST', {});
     await refresh();
@@ -341,8 +355,9 @@ document.addEventListener('click', event => {
   }
   else if (button.dataset.action === 'refresh') action(refresh);
   else if (button.dataset.action === 'fullscreen') {
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else $('#app').requestFullscreen?.().catch(() => toast('Presentation mode is unavailable in this browser.', true));
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => toast('Could not exit presentation mode. Press Escape.', true));
+    else if ($('#app').requestFullscreen) $('#app').requestFullscreen().catch(() => toast('Presentation mode is unavailable in this browser.', true));
+    else toast('Presentation mode is unavailable in this browser.', true);
   } else if (button.id === 'signout') action(async () => {
     await api('/logout', 'POST');
     state.session = await api('/session');
@@ -476,5 +491,11 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) pollLiveData();
 });
 window.addEventListener('focus', pollLiveData);
+document.addEventListener('fullscreenchange', () => {
+  presentation = document.fullscreenElement === $('#app');
+  winnerPage = 0;
+  roundPage = Math.max(0, Math.floor((state.data?.rounds.findIndex(round => !round.rolled_at) || 0) / 3));
+  if (state.data) render();
+});
 
 initialize();
