@@ -9,6 +9,7 @@ test('presentation fits projector and laptop screens with paginated winners and 
   await new Promise(resolve => server.once('listening', resolve));
   let browser;
   try {
+    await h.pool.query('UPDATE events SET is_demo=TRUE WHERE id=1');
     const plan = [
       { name: 'Round 1', prize_label: 'Gift hamper', winner_count: 10 },
       { name: 'Round 2', prize_label: 'Shopping voucher', winner_count: 4 },
@@ -40,7 +41,7 @@ test('presentation fits projector and laptop screens with paginated winners and 
       assert.equal(await page.locator('.presentation-logo').evaluate(image => image.complete && image.naturalWidth > 0), true);
       const measurements = await page.evaluate(() => {
         const app = document.querySelector('#app');
-        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages'];
+        const targets = ['#draw-stage', '#round-controls', '#winners-list', '[data-roll-round]', '.presentation-pages', '[data-action="reset-demo"]'];
         return {
           noScroll: app.scrollHeight <= app.clientHeight + 1 && app.scrollWidth <= app.clientWidth + 1,
           visible: targets.every(selector => {

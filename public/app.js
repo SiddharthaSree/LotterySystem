@@ -11,6 +11,7 @@ let connectionLost = false;
 let presentation = false;
 let winnerPage = 0;
 let roundPage = 0;
+const initializedCelebrations = new WeakSet();
 
 async function api(path, method = 'GET', body) {
   const response = await fetch(`/api${path}`, {
@@ -138,7 +139,9 @@ function stage() {
   const { event, draws, remaining, batch } = state.data;
   const visible = draws.find(d => d.id === state.data.current_draw_id) || draws[0];
   const rolling = revealing(visible);
-  return `<div class="draw-stage" id="draw-stage"><p class="eyebrow">${escape(event.title)}</p>
+  const celebrate = visible?.status === 'claimed' && !rolling && visible.reveal_ends_at > 0 &&
+    serverNow() >= visible.reveal_ends_at && serverNow() - visible.reveal_ends_at < 5000;
+  return `<div class="draw-stage" id="draw-stage">${celebrate ? `<div class="confetti-burst" data-celebration="${visible.reveal_ends_at}" aria-hidden="true">${'<i></i>'.repeat(60)}</div>` : ''}<p class="eyebrow">${escape(event.title)}</p>
     ${batch ? `<p class="batch-progress">Winner ${batch.current_position} of ${batch.winner_count}${batch.requested_count > batch.winner_count ? ` &middot; ${batch.requested_count} requested; ${batch.winner_count} available` : ''}</p>` : ''}
     ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
       <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
@@ -161,7 +164,7 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div>` : ''}
+  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : resetDemoButton()}
     <div class="draw-layout"><div class="draw-main">${stage()}
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
@@ -169,6 +172,11 @@ function renderDraw(admin = false) {
       '<p class="helper">This screen updates automatically. Each winning ticket is followed by the employee name. Winners keep their prize even if they are offline.</p>'}</div>${winnersList()}</div>
     <div class="notice">Every selected winner is automatically awarded one prize. Attendance and separate confirmation are not required; prizes can be collected later. All other tickets belonging to a winner are excluded immediately, including within the same roll.</div>
     ${admin ? `<div class="section-heading"><h3>Selection history</h3><a class="button secondary" href="/api${adminPath('/export')}">Export winners (CSV)</a></div>${drawHistory()}` : ''}`;
+}
+
+function resetDemoButton() {
+  return state.session.admin && state.data.event.is_demo ?
+    `<button class="secondary" type="button" data-action="reset-demo" ${state.data.batch?.active ? 'disabled' : ''}>Reset demo</button>` : '';
 }
 
 function roundControls() {
@@ -339,6 +347,14 @@ document.addEventListener('click', event => {
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
   else if (button.dataset.winnerPage) { winnerPage += Number(button.dataset.winnerPage); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
+  else if (button.dataset.action === 'reset-demo') action(async () => {
+    if (!confirm('Reset this demo? Its winners and round progress will be cleared. Employees, tickets, and round settings stay unchanged. Real events are not affected.')) return;
+    await api(adminPath('/reset-demo'), 'POST', { confirm: true });
+    winnerPage = 0;
+    roundPage = 0;
+    await refresh();
+    toast('Demo reset. Ready to roll Round 1 again.');
+  });
   else if (button.dataset.rollRound) action(async () => {
     const result = await api(adminPath(`/rounds/${button.dataset.rollRound}/roll`), 'POST', {});
     await refresh();
@@ -421,6 +437,12 @@ async function initialize() {
 }
 
 setInterval(() => {
+  document.querySelectorAll('[data-celebration]').forEach(layer => {
+    if (initializedCelebrations.has(layer)) return;
+    initializedCelebrations.add(layer);
+    const elapsed = Math.max(0, serverNow() - Number(layer.dataset.celebration));
+    layer.getAnimations({ subtree: true }).forEach(animation => { animation.currentTime = elapsed; });
+  });
   const container = $('[data-reveal]');
   if (!container || !state.data) return;
   const draw = state.data.draws.find(d => String(d.id) === container.dataset.reveal);

@@ -16,6 +16,8 @@ The supplied CSI Solution logo is displayed in the portal header and the fullscr
 - Optional planned rounds: configure each round's name, prize, and winner count before going Live. Plans lock permanently on Live, and a signed-in admin runs successive rounds from the public draw page. Other viewers only watch. Existing events with no prior draws can adopt a round plan; events already drawn retain manual batches.
 - Multiple events with separate employees, tickets, tasks, winners, and audit trails. Titles and event rules are editable.
 - Public live draw screen (one-second updates), synchronized sequential 10-second ticket-and-name reveals with a short pause between winners, responsive mobile layouts, presentation mode, winner history, CSV export, and an admin audit trail.
+- Slot-machine-style rolling digits and a confetti burst for each newly revealed winner appear on both admin and audience screens. Reduced-motion preferences disable these effects; celebrations do not replay for old winners.
+- The designated reusable demo has an admin-only **Reset demo** button on the live draw screen (including presentation mode). Confirm to clear its winners and round progress, restore Live status, and start again with the same employees, tickets, and locked round plan. Wait for any active reveals to finish first. Previous results are retained in the demo's audit trail. Normal events cannot be reset, and the demo designation is not editable through event settings.
 - PostgreSQL-backed production sessions, CSRF protection, admin login rate limiting, secure production cookies, parameterized database queries, and protective HTTP headers.
 
 ## Local preview without a database account
