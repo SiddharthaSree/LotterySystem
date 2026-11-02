@@ -108,6 +108,8 @@ For manual setup, generate a session secret locally with `node -e "console.log(r
 9. Winners can collect their prizes later, even if they were offline during the draw. Export winners as CSV and coordinate distribution outside the portal. The portal records awards, not physical delivery or collection.
 10. End the event when complete; **Ended is a permanent read-only archive**. Create a new event for the next celebration instead of resetting old winners.
 
+Keep the audience link open before starting a roll, preferably in a separate window on the presentation display. Audience and admin draw screens keep requesting updates even when their tab is in the background, and immediately resynchronize when focused again. Browsers can throttle or suspend background tabs, so keep the presentation window visible for the full animation. Opening the audience page after a reveal finishes shows the recorded winners rather than replaying an already completed roll. After a portal deployment, refresh both admin and audience windows to load the latest application code.
+
 ### Upgrading from attendance-based draws
 
 Startup adds the batch/reveal fields without deleting event records. Any old selection still awaiting attendance confirmation is automatically awarded exactly once and logged in the audit trail. Previously awarded winners remain excluded. Old absent selections are preserved as unawarded history; those employees remain eligible unless they subsequently won. The database retains `status='claimed'` for awarded records for compatibility, but the interface and CSV describe them as awards, not prize collection. The old attendance-resolution endpoint returns an explicit upgrade message instead of undoing an award.

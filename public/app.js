@@ -373,10 +373,12 @@ setInterval(() => {
   if ($('#reveal-message').textContent !== message) $('#reveal-message').textContent = message;
 }, 100);
 
-setInterval(async () => {
-  if (document.hidden || state.busy || polling || !state.data) return;
+async function pollLiveData() {
+  if (state.busy || polling || !state.data) return;
   const page = route();
   if (page !== 'draw' && page !== 'employee' && !(page === 'admin' && state.tab === 'draw')) return;
+  // Audience windows must keep following the draw while the coordinator uses another tab.
+  if (document.hidden && page === 'employee') return;
   if (page === 'employee' && Date.now() - lastPoll < 5000) return;
   polling = true;
   lastPoll = Date.now();
@@ -413,6 +415,12 @@ setInterval(async () => {
     if (!connectionLost) toast('Live updates interrupted. Reconnecting automatically; keep this screen open.', true);
     connectionLost = true;
   } finally { polling = false; }
-}, 1000);
+}
+
+setInterval(pollLiveData, 1000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) pollLiveData();
+});
+window.addEventListener('focus', pollLiveData);
 
 initialize();

@@ -49,6 +49,9 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await audience.goto(`${base}/?event=1#draw`);
     await audience.getByRole('heading', { name: 'Your moment is coming.', exact: true }).waitFor();
     assert.equal(await audience.getByRole('button', { name: 'Roll & reveal' }).count(), 0);
+    await audience.evaluate(() => {
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+    });
     await admin.getByLabel('Prize name for this selection').fill('A festive hamper');
     await admin.getByLabel('Number of winners', { exact: true }).fill('5');
     const started = Date.now();
@@ -62,6 +65,11 @@ test('browser: registration, verification, batch awards and sequential synchroni
     const secondName = names.find(p => p.id === selection.draws[1].person_id).name;
     await admin.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     await audience.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
+    await audience.evaluate(() => {
+      delete document.hidden;
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('focus'));
+    });
     assert.equal(await admin.getByRole('heading', { name: 'Browser Employee', exact: true }).count(), 0);
     assert.equal(await admin.getByRole('button', { name: 'Present & claimed', exact: true }).count(), 0);
     assert.equal(await admin.getByRole('button', { name: 'Absent', exact: false }).count(), 0);
@@ -90,9 +98,11 @@ test('browser: registration, verification, batch awards and sequential synchroni
     assert.equal(await audience.getByRole('heading', { name: secondName, exact: true }).count(), 0);
     await admin.getByText('Winner 2 of 2', { exact: false }).waitFor();
     await admin.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
-    await audience.reload();
     await audience.getByText('Winner 2 of 2', { exact: false }).waitFor();
     await audience.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
+    await lateViewer.reload();
+    await lateViewer.getByText('Winner 2 of 2', { exact: false }).waitFor();
+    await lateViewer.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     await admin.getByRole('heading', { name: secondName, exact: true }).waitFor();
     assert.ok(Date.now() - started >= 21900);
     await audience.getByRole('heading', { name: secondName, exact: true }).waitFor();
