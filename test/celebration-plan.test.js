@@ -3,7 +3,39 @@ import assert from 'node:assert/strict';
 import request from 'supertest';
 import { harness } from './helpers.js';
 import { initialize } from '../lib/database.js';
-import { celebrationPlan, updateCelebrationPlan } from '../scripts/update-celebration-plan.js';
+import { celebrationPlan, updateCelebrationPlan, updateCelebrationLabels } from '../scripts/update-celebration-plan.js';
+
+test('prize relabeling removes amounts everywhere without resetting winners, tickets or round progress', async () => {
+  const h = await harness();
+  try {
+    const root = '/admin/events/1';
+    await h.write('patch', root, { ...h.settings, title: 'Celebration - 5 November 2026' }).expect(200);
+    await h.write('put', `${root}/rounds`, { rounds: celebrationPlan.map((r, i) => ({ ...r, prize_label: `INR ${200 * (i + 1)} Gift Voucher` })) }).expect(200);
+    for (let n = 0; n < 6; n++) await h.add(`Employee ${n}`, `labels${n}@example.com`);
+    await h.write('patch', root, { ...h.settings, title: 'Celebration - 5 November 2026', prize_count: 25, status: 'live' }).expect(200);
+    const rounds = (await h.admin.get('/api/events/1/public')).body.rounds;
+    await h.write('post', `${root}/rounds/${rounds[0].id}/roll`, {}).expect(201);
+    const snapshot = async () => ({
+      rounds: (await h.pool.query('SELECT id,winner_count,batch_size,rolls_completed,awarded_count,rolled_at,batch_id FROM rounds ORDER BY id')).rows,
+      draws: (await h.pool.query('SELECT id,person_id,ticket_id,round_id,reveal_at,status,batch_id FROM draws ORDER BY id')).rows,
+      tickets: (await h.pool.query('SELECT * FROM tickets ORDER BY id')).rows,
+      events: (await h.pool.query('SELECT * FROM events ORDER BY id')).rows,
+    });
+    const before = await snapshot();
+    await updateCelebrationLabels(h.pool, [1]);
+    assert.deepEqual(await snapshot(), before);
+    await updateCelebrationLabels(h.pool, [1]);
+    assert.equal((await h.pool.query("SELECT * FROM audit_log WHERE action='event.celebration_prizes_relabelled'")).rows.length, 1);
+    await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second'");
+    const data = (await h.admin.get('/api/events/1/public')).body;
+    assert.deepEqual(data.rounds.map(r => r.prize_label), celebrationPlan.map(r => r.prize_label));
+    assert.ok(data.draws.every(d => d.prize_label === 'Festive Surprise Voucher'));
+    assert.ok(celebrationPlan.every(r => !/[\d\u20b9]/.test(r.prize_label)));
+    const csv = (await h.admin.get(`/api${root}/export`)).text;
+    assert.ok(csv.includes('Festive Surprise Voucher'));
+    assert.ok(!csv.includes('INR 200'));
+  } finally { await h.pool.end(); }
+});
 
 test('25 prizes roll in six batches within three rounds with stable round links and unique winners', async () => {
   const h = await harness();

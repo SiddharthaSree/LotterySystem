@@ -45,11 +45,13 @@ The owner-approved plan has 25 unique winners and six coordinator-triggered roll
 
 | Round | Voucher | Winners | Rolls |
 |---|---|---|---|
-| Festive Rewards | INR 200 | 15 | 5 + 5 + 5 |
-| Celebration Rewards | INR 400 | 8 | 4 + 4 |
-| Grand Finale | INR 800 | 2 | 2 |
+| Festive Rewards | Festive Surprise Voucher | 15 | 5 + 5 + 5 |
+| Celebration Rewards | Celebration Special Voucher | 8 | 4 + 4 |
+| Grand Finale | Grand Celebration Voucher | 2 | 2 |
 
-Total voucher value: INR 7,800. Allow approximately five minutes for 25 sequential reveals and pauses, plus coordinator transitions. At least 25 approved employees are needed to award all prizes; ticket count alone is not sufficient.
+Voucher amounts are intentionally not displayed. Allow approximately five minutes for 25 sequential reveals and pauses, plus coordinator transitions. At least 25 approved employees are needed to award all prizes; ticket count alone is not sufficient.
+
+For already-configured events, `node scripts/update-celebration-plan.js --apply --labels-only` updates round and awarded prize labels without resetting winners, tickets, or roll progress. This correction is transactional, audited, and repeat-safe; historical audit entries are retained unchanged.
 
 After schema initialization, the explicit migration `node scripts/update-celebration-plan.js --apply` updates hosted event 1 and reusable demo 3. It requires `DATABASE_URL`, uses a direct TLS connection, and is transactional, audited, and repeat-safe. Test on a database branch first. It refuses to overwrite a real event with winners or an event currently revealing. It archives and resets only demo results, expands only the designated demo to 40 fictional employees, preserves existing people/tickets, and installs the three-round plan in both events. Do not run this as an automatic startup migration.
 

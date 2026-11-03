@@ -3,11 +3,42 @@ import pg from 'pg';
 import { audit, resetDemo, saveRounds, syncTickets } from '../lib/database.js';
 
 export const celebrationPlan = [
-  { name: 'Festive Rewards', prize_label: '\u20b9200 Gift Voucher', winner_count: 15, batch_size: 5 },
-  { name: 'Celebration Rewards', prize_label: '\u20b9400 Gift Voucher', winner_count: 8, batch_size: 4 },
-  { name: 'Grand Finale', prize_label: '\u20b9800 Gift Voucher', winner_count: 2, batch_size: 2 },
+  { name: 'Festive Rewards', prize_label: 'Festive Surprise Voucher', winner_count: 15, batch_size: 5 },
+  { name: 'Celebration Rewards', prize_label: 'Celebration Special Voucher', winner_count: 8, batch_size: 4 },
+  { name: 'Grand Finale', prize_label: 'Grand Celebration Voucher', winner_count: 2, batch_size: 2 },
 ];
 const action = 'event.celebration_plan_25';
+
+export async function updateCelebrationLabels(pool, eventIds) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const id of [...new Set(eventIds)].sort((a, b) => a - b)) {
+      const { rows: [event] } = await client.query('SELECT * FROM events WHERE id=$1 FOR UPDATE', [id]);
+      if (!event || !event.title.includes('5 November 2026')) throw new Error(`Event ${id} is not a November 5 celebration.`);
+      const { rows: rounds } = await client.query('SELECT * FROM rounds WHERE event_id=$1 ORDER BY position', [id]);
+      if (rounds.length !== celebrationPlan.length || rounds.some((r, i) => r.name !== celebrationPlan[i].name ||
+          r.winner_count !== celebrationPlan[i].winner_count || r.batch_size !== celebrationPlan[i].batch_size)) {
+        throw new Error(`Event ${id} has a different plan; review before relabeling.`);
+      }
+      const changed = [];
+      for (const [i, round] of rounds.entries()) {
+        const label = celebrationPlan[i].prize_label;
+        const { rows: draws } = await client.query(
+          'UPDATE draws SET prize_label=$2 WHERE round_id=$1 AND event_id=$3 AND prize_label<>$2 RETURNING id',
+          [round.id, label, id]);
+        if (round.prize_label === label && !draws.length) continue;
+        await client.query('UPDATE rounds SET prize_label=$2 WHERE id=$1', [round.id, label]);
+        changed.push({ roundId: round.id, previousLabel: round.prize_label, label, drawIds: draws.map(d => d.id) });
+      }
+      if (changed.length) await audit(client, id, 'event.celebration_prizes_relabelled', { changed });
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally { client.release(); }
+}
 
 export async function updateCelebrationPlan(pool, eventIds) {
   const client = await pool.connect();
@@ -69,6 +100,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   url.hostname = url.hostname.replace('-pooler.', '.');
   url.searchParams.set('sslmode', 'verify-full');
   const pool = new pg.Pool({ connectionString: url.toString() });
-  try { console.log(JSON.stringify(await updateCelebrationPlan(pool, [1, 3]))); }
+  try {
+    if (process.argv.includes('--labels-only')) {
+      await updateCelebrationLabels(pool, [1, 3]);
+      console.log('Prize names updated for both events without resetting results.');
+    } else console.log(JSON.stringify(await updateCelebrationPlan(pool, [1, 3])));
+  }
   finally { await pool.end(); }
 }
