@@ -20,6 +20,8 @@ test('browser: registration, verification, batch awards and sequential synchroni
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(base);
     await page.getByRole('heading', { name: 'CSI Solution 2026 Lucky Draw', exact: true }).waitFor();
+    assert.ok(!/\bPMs?\b|Project Manager/.test(await page.locator('#app').innerText()));
+    await page.getByText('Your Diwali Celebration Team: Siddhartha, Rachel, Dileep and Pallavi.', { exact: true }).waitFor();
     assert.equal(await page.locator('header a[href="#admin"]').count(), 0);
     assert.equal(await page.locator('footer').getByRole('link', { name: 'Admin access' }).count(), 1);
     assert.ok(await page.locator('.brand').textContent().then(text => text.includes('Diwali Celebration Draw')));
@@ -39,6 +41,7 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await page.getByLabel('Department (optional)').fill('BU1');
     await page.getByRole('button', { name: 'Register for the event' }).click();
     await page.getByRole('heading', { name: 'Hello, Browser Employee.' }).waitFor();
+    assert.ok(!/\bPMs?\b|Project Manager/.test(await page.locator('#app').innerText()));
     assert.equal(await page.getByRole('button', { name: 'Log out', exact: true }).isVisible(), true);
     await page.getByText('Signed in: Browser Employee', { exact: true }).waitFor();
     assert.ok(await page.getByText('Your registration is awaiting admin approval.', { exact: false }).isVisible());

@@ -4,6 +4,7 @@ import { harness } from './helpers.js';
 import { initialize } from '../lib/database.js';
 import { updateDiwali2026 } from '../scripts/update-diwali-2026.js';
 import { diwaliTasks, DIWALI_SIGNUP_CUTOFF } from '../lib/diwali-2026.js';
+import { updateCelebrationTeam } from '../scripts/update-celebration-team.js';
 
 const legacy = ['Appreciate a colleague', 'Share a positive experience', 'Join the Diwali quiz',
   'Dress in ethnic wear', 'Join a team activity', 'Share an engagement idea'];
@@ -82,14 +83,38 @@ test('schedule migration is atomic and repeat-safe, keeps awards and IDs, and re
     assert.equal((await h.pool.query('SELECT done FROM completions WHERE person_id=$1 AND task_id=$2', [person.id, tasks[2].id])).rows[0].done, false);
     await h.write('put', `/admin/events/1/people/${person.id}/tasks/${tasks[2].id}`, { done: true }).expect(200);
     assert.equal((await h.pool.query('SELECT * FROM tickets WHERE person_id=$1 AND active=TRUE', [person.id])).rows.length, 5);
-    await h.pool.query("UPDATE tasks SET description='PM customized instructions' WHERE id=$1", [tasks[0].id]);
+    await h.pool.query("UPDATE tasks SET description='Team customized instructions' WHERE id=$1", [tasks[0].id]);
     await updateDiwali2026(h.pool, [1, demo.id]);
     await initialize(h.pool);
     data = (await h.admin.get('/api/events/1/public')).body;
-    assert.equal(data.tasks[0].description, 'PM customized instructions');
+    assert.equal(data.tasks[0].description, 'Team customized instructions');
     const logs = (await h.pool.query("SELECT details FROM audit_log WHERE action='event.diwali_2026_rescheduled' ORDER BY event_id")).rows;
     assert.equal(logs.length, 2);
     assert.deepEqual(logs[0].details.previousTickets.map(ticket => String(ticket.id)).sort(), before.map(ticket => String(ticket.id)).sort());
     assert.equal(logs[0].details.previousTasks.length, 6);
+  } finally { await h.pool.end(); }
+});
+
+test('organizer wording update preserves activity rules and employee allocations, and is repeat-safe', async () => {
+  const h = await harness();
+  try {
+    await h.write('patch', '/admin/events/1', { ...h.settings, title: 'Diwali - 5 November 2026' }).expect(200);
+    const tasks = (await h.admin.get('/api/events/1/public')).body.tasks;
+    await h.pool.query('UPDATE tasks SET description=$2 WHERE id=$1', [tasks[0].id,
+      'Your Project Manager (PM) verifies completion. Your PM adds a ticket. PMs enforce the 3-4 November window.']);
+    const person = await h.add('Employee', 'team-test@example.com');
+    await h.write('put', `/admin/events/1/people/${person.id}/tasks/${tasks[0].id}`, { done: true }).expect(200);
+    const before = (await h.pool.query('SELECT * FROM tickets ORDER BY id')).rows;
+    const completions = (await h.pool.query('SELECT * FROM completions')).rows;
+    assert.equal((await updateCelebrationTeam(h.pool)).updatedTasks, 1);
+    const result = (await h.admin.get('/api/events/1/public')).body;
+    assert.ok(!/\bPMs?\b|Project Manager/.test(JSON.stringify(result.tasks)));
+    assert.ok(result.tasks[0].description.includes('The Diwali Celebration Team verifies completion.'));
+    assert.ok(result.tasks[0].description.includes('3-4 November'));
+    assert.deepEqual(result.tasks.map(t => [t.id, t.active, t.reward]), tasks.map(t => [t.id, t.active, t.reward]));
+    assert.deepEqual((await h.pool.query('SELECT * FROM tickets ORDER BY id')).rows, before);
+    assert.deepEqual((await h.pool.query('SELECT * FROM completions')).rows, completions);
+    assert.equal((await updateCelebrationTeam(h.pool)).updatedTasks, 0);
+    assert.equal((await h.pool.query("SELECT id FROM audit_log WHERE action='event.celebration_team_wording_updated'")).rows.length, 1);
   } finally { await h.pool.end(); }
 });

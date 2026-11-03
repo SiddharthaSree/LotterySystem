@@ -177,7 +177,7 @@ function activities(tasks, employee = false) {
   return `<div class="grid">${tasks.map((task, index) => `<article class="card">
     <div class="card-top"><span class="activity-number">${String(index + 1).padStart(2, '0')}</span>${employee && task.done ? badge('verified') : `<span class="badge">+${task.reward} ticket${task.reward === 1 ? '' : 's'}</span>`}</div>
     <h3>${escape(task.title)}</h3><p>${escape(task.description)}</p>
-    ${employee ? `<p class="helper">${task.done ? 'Verified by your PM. Rewards are subject to the event bonus cap.' : 'Complete this activity within its announced window and send proof to your PM through Teams.'}</p>` : ''}
+    ${employee ? `<p class="helper">${task.done ? 'Verified by the Diwali Celebration Team. Rewards are subject to the event bonus cap.' : 'Complete this activity within its announced window and send proof to the Diwali Celebration Team through Teams.'}</p>` : ''}
   </article>`).join('')}</div>`;
 }
 
@@ -186,7 +186,7 @@ function renderHome() {
   const closed = event.status === 'ended' || Date.now() >= new Date(event.signup_closes_at).getTime();
   return `<section class="hero">
     <div><p class="eyebrow">Together is where the magic happens</p><h1>${escape(event.title)}</h1>
-    <p>A celebration of our people, a little festive fun, and a chance to take home something special. Every employee gets one base ticket, even without activity participation. Your PM approves your entry for the draw.</p>
+    <p>A celebration of our people, a little festive fun, and a chance to take home something special. Every employee gets one base ticket, even without activity participation. The Diwali Celebration Team approves your entry for the draw.</p>
     <div class="actions"><a class="button" href="#employee">${state.me ? 'View my tickets' : closed ? 'Employee sign-in' : 'Join the celebration'} &rarr;</a><a class="button secondary" href="#draw">Watch the live draw</a></div>
     <p class="helper">${closed ? 'Public registration is closed. Admins can help with late entries.' : `Register by ${escape(date(event.signup_closes_at))}`}</p></div>
     <div class="ticket-art" aria-hidden="true"><div class="decorative-ticket"><div class="ticket-label">A LITTLE LUCK, JUST FOR YOU</div><div class="ticket-star">&#10022;</div><strong>YOUR NEXT BIG MOMENT</strong><div class="ticket-bottom"><span>ONE TEAM. MANY POSSIBILITIES.</span><span>01</span></div></div><p>PARTICIPATE &middot; CONNECT &middot; CELEBRATE</p></div>
@@ -197,7 +197,8 @@ function renderHome() {
   ${activities(tasks)}
   <div class="notice">Participation is voluntary, and onsite and remote employees are equally welcome. Each activity counts once. More tickets improve your chances but never guarantee a prize. An internal alternative is available for the LinkedIn activity.</div>
   <div class="section-heading"><h2>Your route to the draw</h2></div>
-  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and email address. Department is optional. Your Project Manager (PM) approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Follow each activity's date and eligibility rules, then send proof through Teams. Your PM verifies it and allocates the bonus ticket through administrator access. Celebration-day winners can be verified before the draw while the event is Open or Live.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Celebrate your lucky moment</strong><p>Watch online or onsite, or check the winners later. Prizes are awarded even if you are offline. Each person can win only once per event.</p></div></div>`;
+  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and email address. Department is optional. The Diwali Celebration Team approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Follow each activity's date and eligibility rules, then send proof through Teams. The Diwali Celebration Team verifies it and allocates the bonus ticket through administrator access. Celebration-day winners can be verified before the draw while the event is Open or Live.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Celebrate your lucky moment</strong><p>Watch online or onsite, or check the winners later. Prizes are awarded even if you are offline. Each person can win only once per event.</p></div></div>
+  <div class="notice"><strong>Your Diwali Celebration Team: Siddhartha, Rachel, Dileep and Pallavi.</strong> Contact the team through Teams for registration approvals, activity verification, bonus tickets or prize collection.</div>`;
 }
 
 function renderEmployee() {
@@ -205,7 +206,7 @@ function renderEmployee() {
   if (!state.me) {
     const signup = state.authTab === 'signup';
     const closed = event.status === 'ended' || Date.now() >= new Date(event.signup_closes_at).getTime();
-    return `<section class="auth-layout"><div class="auth-intro"><p class="eyebrow">Your celebration starts here</p><h1>One team.<br>A little more luck.</h1><p>First visit? Register once. Already approved? Log in with the same email to see your tickets.</p><div class="notice">Any valid email address is accepted; PM approval is required.<br>Registration deadline: ${escape(date(event.signup_closes_at))}</div><p class="small">This internal portal uses email-only access, not email verification. Do not enter sensitive information.</p></div>
+    return `<section class="auth-layout"><div class="auth-intro"><p class="eyebrow">Your celebration starts here</p><h1>One team.<br>A little more luck.</h1><p>First visit? Register once. Already approved? Log in with the same email to see your tickets.</p><div class="notice">Any valid email address is accepted; Diwali Celebration Team approval is required.<br>Contact Siddhartha, Rachel, Dileep or Pallavi through Teams.<br>Registration deadline: ${escape(date(event.signup_closes_at))}</div><p class="small">This internal portal uses email-only access, not email verification. Do not enter sensitive information.</p></div>
     <div class="card auth-card"><div class="tabs"><button data-auth="signup" class="${signup ? 'active' : ''}">Register</button><button data-auth="login" class="${!signup ? 'active' : ''}">Employee log in</button></div>
     <h2>${signup ? 'Save your spot' : 'Welcome back'}</h2><p class="muted small">${signup ? 'Every entry is reviewed by an admin.' : 'Use the email address approved for this event.'}</p>
     ${signup && closed ? '<div class="notice">Public registration is closed. Contact an admin for a late entry, or sign in to your approved account.</div>' :
@@ -228,7 +229,7 @@ function renderEmployee() {
     <div class="stats">${stat(eligible ? tickets.length : 0, 'Eligible tickets')}${stat(1, 'Base ticket')}${stat(Math.max(0, tickets.length - 1), 'Allocated bonus tickets')}${stat(event.bonus_cap, 'Bonus-ticket cap')}</div>
     <div class="card"><h3>Your ticket wallet</h3><p>${eligible ? 'Each of these tickets is linked to your entry and has the same chance in the draw.' : 'Allocated ticket identifiers are shown below for your records; they are not currently eligible for selection.'}</p>
     <div class="ticket-list">${tickets.map(t => `<span class="mini-ticket">${ticketCode(t.ticket_number)} ${t.source_key === 'base' ? '/ BASE' : '/ BONUS'}</span>`).join('')}</div></div>
-    <div class="section-heading"><div><p class="eyebrow">Get involved</p><h2>Your engagement activities</h2></div><p class="muted small">Send activity proofs to your PM on Teams.</p></div>
+    <div class="section-heading"><div><p class="eyebrow">Get involved</p><h2>Your engagement activities</h2></div><p class="muted small">Send activity proofs to the Diwali Celebration Team on Teams: Siddhartha, Rachel, Dileep or Pallavi.</p></div>
     ${activities(tasks, true)}<div class="notice">Missing a ticket or a completed activity? Contact your coordinator through Teams. Repeated participation in the same activity does not earn additional tickets. Bonus tickets are capped at ${event.bonus_cap}.</div>`;
 }
 
@@ -344,7 +345,7 @@ function renderPeople() {
     <details class="card"><summary>Add an employee (also after the cutoff)</summary><p class="helper">Admin-added entries are approved immediately and can use any email domain.</p><form data-form="add-person">${field('name', 'Name', '', 'text', 'required maxlength="100"')}${field('email', 'Email', '', 'email', 'required maxlength="254"')}${field('department', 'Department (optional)', '', 'text', 'maxlength="80" placeholder="e.g. BU1, BU2 or HR"')}<button class="primary" ${ended ? 'disabled' : ''}>Add approved employee</button></form></details></div>
     <aside class="card">${person ? `<p class="eyebrow">Employee verification</p><h3>${escape(person.name)}</h3><p>${escape(person.email)}</p><label class="check-row"><input type="checkbox" data-approve="${person.id}" ${person.approved ? 'checked' : ''} ${ended ? 'disabled' : ''}><span>Approved for this event</span></label>
     <form data-form="department" data-owner="${person.id}">${field('department', 'Department (optional)', person.department, 'text', 'maxlength="80" placeholder="e.g. BU1, BU2 or HR"')}<button class="secondary" ${ended ? 'disabled' : ''}>Save department</button><p class="helper">For coordinator reference only; not shown on the public draw.</p></form>
-    <p class="helper">PMs: verify the activity rules and evidence through Teams before ticking Done. Quiz/game participation alone is not a win. Celebration-day tickets can be added before the draw while Open or Live. Unticking reverses the reward; the event cap applies automatically.</p>
+    <p class="helper">Diwali Celebration Team: verify the activity rules and evidence through Teams before ticking Done. Quiz/game participation alone is not a win. Celebration-day tickets can be added before the draw while Open or Live. Unticking reverses the reward; the event cap applies automatically.</p>
     ${tasks.map(t => `<label class="check-row"><input type="checkbox" data-complete="${t.id}" data-owner="${person.id}" ${completions.some(c => c.person_id === person.id && c.task_id === t.id && c.done) ? 'checked' : ''} ${ended || !t.active ? 'disabled' : ''}><span>${escape(t.title)}${!t.active ? ' (inactive)' : ''}<br><small>+${t.reward} ticket${t.reward === 1 ? '' : 's'}</small></span></label>`).join('')}
     <form data-form="manual-bonus" data-owner="${person.id}">${field('extra_bonus', 'Additional admin bonus (subject to event cap)', person.extra_bonus, 'number', 'min="0" max="100" required')}<button class="secondary" ${ended ? 'disabled' : ''}>Save admin bonus</button></form>
     <div class="notice">${person.ticket_count} allocated tickets. ${person.won ? 'Already a winner; no tickets are eligible.' : !person.approved ? 'Approval is needed before tickets are eligible.' : 'All active tickets are eligible until a prize is awarded.'}</div>` :
@@ -361,7 +362,7 @@ function renderTasks() {
     <p class="helper">Changing rewards or availability recalculates existing allocations under the event cap.</p><button class="primary" ${ended ? 'disabled' : ''}>${task.id ? 'Save activity' : 'Add activity'}</button></form>`;
   const active = state.admin.tasks.filter(task => task.active);
   const inactive = state.admin.tasks.filter(task => !task.active);
-  return `<div class="section-heading"><div><h2>Engagement activities</h2><p class="muted small">PMs verify the rules and participation windows below. Proofs stay in Teams, not this portal. Inactive activities do not earn tickets.</p></div></div><div class="grid">${active.map(taskForm).join('')}${taskForm({})}</div>
+  return `<div class="section-heading"><div><h2>Engagement activities</h2><p class="muted small">The Diwali Celebration Team verifies the rules and participation windows below. Proofs stay in Teams, not this portal. Inactive activities do not earn tickets.</p></div></div><div class="grid">${active.map(taskForm).join('')}${taskForm({})}</div>
     ${inactive.length ? `<details class="card"><summary>Inactive activities / historical records (${inactive.length})</summary><p class="helper">Retained for reference only. These instructions may describe a previous schedule and are not current eligibility rules.</p><div class="grid">${inactive.map(taskForm).join('')}</div></details>` : ''}`;
 }
 
