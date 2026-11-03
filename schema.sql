@@ -3,11 +3,12 @@ CREATE TABLE IF NOT EXISTS events (
   title TEXT NOT NULL,
   signup_closes_at TIMESTAMPTZ NOT NULL,
   allowed_domains TEXT NOT NULL DEFAULT 'gmail.com',
-  bonus_cap INTEGER NOT NULL DEFAULT 5 CHECK (bonus_cap BETWEEN 0 AND 100),
+  bonus_cap INTEGER NOT NULL DEFAULT 4 CHECK (bonus_cap BETWEEN 0 AND 100),
   prize_count INTEGER NOT NULL DEFAULT 5 CHECK (prize_count BETWEEN 1 AND 1000),
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'live', 'ended')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE events ALTER COLUMN bonus_cap SET DEFAULT 4;
 CREATE TABLE IF NOT EXISTS people (
   id SERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL REFERENCES events(id),

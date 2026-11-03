@@ -9,6 +9,9 @@ test('browser: registration, verification, batch awards and sequential synchroni
   await new Promise(resolve => server.once('listening', resolve));
   let browser;
   try {
+    await h.write('post', '/admin/events/1/tasks', {
+      title: 'Retired reference activity', description: 'Historical instructions', reward: 1, active: false,
+    }).expect(200);
     browser = await chromium.launch({ headless: true });
     const base = `http://127.0.0.1:${server.address().port}`;
     const errors = [];
@@ -17,6 +20,10 @@ test('browser: registration, verification, batch awards and sequential synchroni
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(base);
     await page.getByRole('heading', { name: 'CSI Solution 2026 Lucky Draw', exact: true }).waitFor();
+    assert.equal(await page.locator('.grid .card').count(), 4);
+    await page.getByText('One base ticket + up to 4 bonus tickets = up to 5 tickets', { exact: true }).waitFor();
+    await page.getByText('3-4 November 2026', { exact: false }).first().waitFor();
+    await page.getByRole('heading', { name: 'Win a Diwali quiz or game', exact: true }).waitFor();
     await page.getByRole('link', { name: 'Join the celebration' }).click();
     await page.getByLabel('Your name').fill('Browser Employee');
     await page.getByLabel('Email address', { exact: true }).fill('browser@gmail.com');
@@ -30,6 +37,11 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await admin.getByLabel('Admin email').fill(h.config.adminEmail);
     await admin.getByLabel('Admin password').fill(h.config.adminPassword);
     await admin.getByRole('button', { name: 'Sign in to admin' }).click();
+    await admin.getByRole('button', { name: 'Activities', exact: true }).click();
+    assert.equal(await admin.locator('details [data-form="task"]').isVisible(), false);
+    await admin.getByText('Inactive activities / historical records (1)', { exact: true }).click();
+    assert.equal(await admin.locator('details [data-form="task"]').isVisible(), true);
+    await admin.getByRole('button', { name: 'People & tickets', exact: true }).click();
     await admin.getByRole('button', { name: 'Manage', exact: true }).click();
     await admin.getByLabel('Approved for this event').check();
     await admin.getByText('Employee approval updated.', { exact: true }).waitFor();
@@ -121,6 +133,15 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await page.getByRole('link', { name: 'My tickets', exact: true }).click();
     assert.equal(await page.locator('.golden-ticket blockquote').textContent(), message);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    for (const width of [390, 768, 1366]) {
+      await page.setViewportSize({ width, height: 900 });
+      assert.equal(await page.evaluate(() => {
+        const ticket = document.querySelector('.golden-ticket');
+        return ticket.scrollWidth <= ticket.clientWidth + 1 &&
+          getComputedStyle(ticket).maskImage.includes('radial-gradient') &&
+          getComputedStyle(ticket, '::before').borderStyle.includes('double');
+      }), true);
+    }
     await audience.goto(`${base}/?event=1#draw`);
     await audience.getByText('Prize awarded', { exact: false }).first().waitFor();
     assert.equal(await audience.getByText('browser@gmail.com', { exact: true }).count(), 0);

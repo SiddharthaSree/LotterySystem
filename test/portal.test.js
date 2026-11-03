@@ -72,7 +72,7 @@ test('task completion is idempotent and reversible, respects cap, and updates st
   await h.write('put', path, { done: true }).expect(200);
   assert.deepEqual((await check()).rows, first);
   for (const task of tasks.slice(1)) await h.write('put', `/admin/events/1/people/${person.id}/tasks/${task.id}`, { done: true }).expect(200);
-  assert.equal((await check()).rows.length, 6);
+  assert.equal((await check()).rows.length, 5);
   await h.write('patch', '/admin/events/1', { ...h.settings, bonus_cap: 2 }).expect(200);
   assert.equal((await check()).rows.length, 3);
   await h.write('patch', `/admin/events/1/tasks/${tasks[0].id}`, { ...tasks[0], active: false }).expect(200);
@@ -85,7 +85,7 @@ test('admin manual bonus uses the same cap and can be removed', async () => {
   const person = await h.add('Manual Tester', 'manual@gmail.com');
   const count = async () => Number((await h.pool.query('SELECT COUNT(*) AS count FROM tickets WHERE person_id=$1 AND active=TRUE', [person.id])).rows[0].count);
   await h.write('patch', `/admin/events/1/people/${person.id}`, { extra_bonus: 100 }).expect(200);
-  assert.equal(await count(), 6);
+  assert.equal(await count(), 5);
   await h.write('patch', `/admin/events/1/people/${person.id}`, { extra_bonus: 0 }).expect(200);
   assert.equal(await count(), 1);
   await h.write('patch', `/admin/events/1/people/${person.id}`, { extra_bonus: -1 }).expect(400);
@@ -162,7 +162,7 @@ test('parallel batch rolls award distinct people once, cap by prizes, and preser
   assert.equal(new Date(batch.draws[1].reveal_at) - new Date(batch.draws[0].reveal_at), 12000);
   let data = (await h.admin.get(`/api/events/${event.id}/public`)).body;
   assert.equal(data.remaining, 0);
-  assert.equal(data.stats.tickets, 6);
+  assert.equal(data.stats.tickets, 5);
   assert.equal(data.current_draw_id, batch.draws[0].id);
   assert.ok(data.draws.every(d => d.name === null));
   assert.equal(data.draws[0].ticket_id, null);
