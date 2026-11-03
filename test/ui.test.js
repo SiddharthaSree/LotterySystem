@@ -144,6 +144,21 @@ test('browser: registration, verification, batch awards and sequential synchroni
     const employeeDraw = selection.draws.find(draw => draw.person_id === names.find(p => p.name === 'Browser Employee').id);
     assert.equal(await page.locator('.golden-ticket-stub strong').textContent(), `CSI-${employeeDraw.ticket_number}`);
     assert.ok((await page.locator('.golden-ticket blockquote').textContent()).includes('CSI'));
+    const contrast = await page.locator('.golden-ticket').evaluate(ticket => {
+      const luminance = color => {
+        const channels = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(c => {
+          const value = c / 255;
+          return value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4;
+        });
+        return channels[0] * .2126 + channels[1] * .7152 + channels[2] * .0722;
+      };
+      const backgrounds = getComputedStyle(ticket).backgroundImage.match(/rgb\([^)]+\)/g).map(luminance);
+      return [...ticket.querySelectorAll('h2, p, blockquote, strong, span')].map(element => {
+        const foreground = luminance(getComputedStyle(element).color);
+        return Math.min(...backgrounds.map(background => (Math.max(background, foreground) + .05) / (Math.min(background, foreground) + .05)));
+      });
+    });
+    assert.ok(contrast.every(ratio => ratio >= 4.5), `All ticket text must meet 4.5:1 contrast: ${contrast}`);
     const message = await page.locator('.golden-ticket blockquote').textContent();
     await page.getByRole('link', { name: 'Home', exact: true }).click();
     await page.getByRole('link', { name: 'My tickets', exact: true }).click();

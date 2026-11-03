@@ -132,14 +132,16 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .check-row small { color: var(--muted); }
 .ticket-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
 .mini-ticket { border: 1px dashed #cfb791; background: #fff7e6; border-radius: 7px; padding: 10px 15px; color: #926027; font: 650 12px Consolas, monospace; }
-.golden-ticket { position: relative; background: linear-gradient(105deg, #a96d13, #f4cf67 8%, #fff0a6 28%, #e8b843 44%, #fff2b0 60%, #edc258 85%, #a96d13); color: #513710; border: 1px solid #ac7724; border-radius: 3px; padding: 38px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; box-shadow: inset 0 0 0 6px #e7b749; mask: radial-gradient(circle at 0 12px, transparent 5px, #000 6px) left / 51% 24px repeat-y, radial-gradient(circle at 100% 12px, transparent 5px, #000 6px) right / 51% 24px repeat-y; }
+.golden-ticket { position: relative; background: linear-gradient(105deg, #f0dfbd, #fffaf0 28%, #f6e8cd 60%, #fffaf0 85%, #f0dfbd); color: #35203e; border: 1px solid #ac7724; border-radius: 3px; padding: 38px; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 24px; box-shadow: inset 0 0 0 6px #d5b77b; mask: radial-gradient(circle at 0 12px, transparent 5px, #000 6px) left / 51% 24px repeat-y, radial-gradient(circle at 100% 12px, transparent 5px, #000 6px) right / 51% 24px repeat-y; }
 .golden-ticket::before { content: ""; position: absolute; inset: 12px; border: 4px double #815612; border-radius: 18px 4px; pointer-events: none; }
 .ticket-ornament { color: #80530d; letter-spacing: 8px; margin-bottom: 12px; }
 .ticket-barcode { height: 36px; width: min(160px, 100%); background: repeating-linear-gradient(90deg, #63410c 0 2px, transparent 2px 4px, #63410c 4px 5px, transparent 5px 8px, #63410c 8px 12px, transparent 12px 15px); opacity: .7; }
 .golden-ticket h2 { font-size: clamp(24px, 3vw, 36px); overflow-wrap: anywhere; }
-.golden-ticket .eyebrow { color: #725015; }
+.golden-ticket .eyebrow { color: #634218; }
+.golden-ticket p, .golden-ticket blockquote, .golden-ticket-stub span, .golden-ticket-stub strong { color: #35203e; }
+.golden-ticket .ticket-ornament { color: #80530d; }
 .golden-prize { font-size: 20px; font-weight: 700; }
-.golden-ticket blockquote { margin: 20px 0; font-size: 17px; font-style: italic; }
+.golden-ticket blockquote { margin: 20px 0; font-size: 17px; font-style: normal; font-weight: 500; line-height: 1.7; }
 .golden-ticket-stub { border-left: 2px dashed #a47725; padding-left: 24px; display: flex; flex-direction: column; justify-content: center; gap: 12px; min-width: 0; }
 .golden-ticket-stub span { font-size: 11px; font-weight: 800; letter-spacing: 2px; }
 .golden-ticket-stub strong { font: 800 clamp(16px, 2vw, 26px) Consolas, monospace; overflow-wrap: anywhere; }
