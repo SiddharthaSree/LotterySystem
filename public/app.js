@@ -209,7 +209,7 @@ function renderEmployee() {
       <button class="primary full" type="submit">${signup ? 'Register for the event' : 'View my tickets'} &rarr;</button></form>`}
     </div></section>`;
   }
-  const { person, tickets, tasks, won, winning_ticket_id: winningTicketId, award_pending: awardPending } = state.me;
+  const { person, tickets, tasks, won, winning_ticket_number: winningTicketId, award_pending: awardPending } = state.me;
   const messageKey = `${event.id}:${person.id}:${winningTicketId}`;
   if (won && !winnerMessages.has(messageKey)) {
     winnerMessages.set(messageKey, appreciationMessages[Math.floor(Math.random() * appreciationMessages.length)]);
@@ -221,14 +221,14 @@ function renderEmployee() {
     ${awardPending ? '<div class="notice">A prize has been reserved for you. Watch the live draw for your ticket and name reveal. Your tickets are no longer eligible for another prize.</div>' : ''}
     <div class="stats">${stat(eligible ? tickets.length : 0, 'Eligible tickets')}${stat(1, 'Base ticket')}${stat(Math.max(0, tickets.length - 1), 'Allocated bonus tickets')}${stat(event.bonus_cap, 'Bonus-ticket cap')}</div>
     <div class="card"><h3>Your ticket wallet</h3><p>${eligible ? 'Each of these tickets is linked to your entry and has the same chance in the draw.' : 'Allocated ticket identifiers are shown below for your records; they are not currently eligible for selection.'}</p>
-    <div class="ticket-list">${tickets.map(t => `<span class="mini-ticket">${ticketCode(t.id)} ${t.source_key === 'base' ? '/ BASE' : '/ BONUS'}</span>`).join('')}</div></div>
+    <div class="ticket-list">${tickets.map(t => `<span class="mini-ticket">${ticketCode(t.ticket_number)} ${t.source_key === 'base' ? '/ BASE' : '/ BONUS'}</span>`).join('')}</div></div>
     <div class="section-heading"><div><p class="eyebrow">Get involved</p><h2>Your engagement activities</h2></div><p class="muted small">Send activity proofs to your PM on Teams.</p></div>
     ${activities(tasks, true)}<div class="notice">Missing a ticket or a completed activity? Contact your coordinator through Teams. Repeated participation in the same activity does not earn additional tickets. Bonus tickets are capped at ${event.bonus_cap}.</div>`;
 }
 
 function winnersList() {
   const wins = state.data.draws.filter(d => d.status === 'claimed' && !revealing(d)).slice().reverse();
-  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid" tabindex="0" role="region" aria-label="Scroll through all winners">${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_id)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div></div>`;
+  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid" tabindex="0" role="region" aria-label="Scroll through all winners">${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_number)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div></div>`;
 }
 
 function stage() {
@@ -242,12 +242,12 @@ function stage() {
     ${batch ? `<p class="batch-progress">Winner ${batch.current_position} of ${batch.winner_count}${batch.requested_count > batch.winner_count ? ` &middot; ${batch.requested_count} requested; ${batch.winner_count} available` : ''}</p>` : ''}
     ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
       <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
-      <div class="ticket-reels" aria-hidden="true"><span class="reel-prefix">CSI</span>${String(visible.ticket_id).padStart(6, '0').split('').map(() => '<span class="reel-digit rolling">?</span>').join('')}</div>
+      <div class="ticket-reels" aria-hidden="true"><span class="reel-prefix">CSI</span>${String(visible.ticket_number).padStart(6, '0').split('').map(() => '<span class="reel-digit rolling">?</span>').join('')}</div>
       <div class="reveal-track" aria-hidden="true"><span id="reveal-progress"></span></div>
       <p id="reveal-message" role="status" aria-live="polite">Rolling the ticket numbers...</p>
       <p class="helper">Decorative animation &middot; the ticket is already randomly selected</p>
     </div><p>${escape(visible.prize_label)}</p>` :
-      visible ? `<div class="winner-reveal" role="status"><span class="badge">${visible.status === 'claimed' ? 'Prize awarded &middot; congratulations!' : 'Past unawarded selection'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_id)}</div><p>${escape(visible.prize_label)}</p><p class="helper">${batch?.active ? 'The next winner will roll automatically...' : 'Winners can collect their prizes later.'}</p></div>` :
+      visible ? `<div class="winner-reveal" role="status"><span class="badge">${visible.status === 'claimed' ? 'Prize awarded &middot; congratulations!' : 'Past unawarded selection'}</span><h2>${escape(visible.name)}</h2><div class="ticket-code">${ticketCode(visible.ticket_number)}</div><p>${escape(visible.prize_label)}</p><p class="helper">${batch?.active ? 'The next winner will roll automatically...' : 'Winners can collect their prizes later.'}</p></div>` :
       `<div class="orb" aria-hidden="true">&#10022;</div><h2>${event.status === 'ended' ? 'A celebration to remember.' : 'Your moment is coming.'}</h2><p>${event.status === 'live' ? 'The draw is live. Good luck, everyone!' : 'Grab a seat. The next lucky name could be yours.'}</p>`}
     <p class="helper">${remaining} prize${remaining === 1 ? '' : 's'} remaining &middot; ${state.data.stats.tickets} eligible tickets</p>
   </div>`;
@@ -316,7 +316,7 @@ function roundPlanner() {
 }
 
 function drawHistory() {
-  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${revealing(d) ? 'Reveal in progress...' : escape(d.name)}</td><td>${escape(d.prize_label)}</td><td>${revealing(d) ? 'CSI-??????' : ticketCode(d.ticket_id)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${revealing(d) ? 'Reveal in progress...' : escape(d.name)}</td><td>${escape(d.prize_label)}</td><td>${revealing(d) ? 'CSI-??????' : ticketCode(d.ticket_number)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
 }
 
 function renderPeople() {
@@ -560,7 +560,7 @@ setInterval(() => {
   if (!draw) return;
   const duration = state.data.reveal_duration_ms;
   const elapsed = Math.max(0, duration - (draw.reveal_ends_at - serverNow()));
-  const digits = String(draw.ticket_id).padStart(6, '0');
+  const digits = String(draw.ticket_number).padStart(6, '0');
   const fixed = Math.min(digits.length, Math.max(0, Math.floor((elapsed - 3000) / (6000 / digits.length))));
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   container.querySelectorAll('.reel-digit').forEach((digit, index) => {

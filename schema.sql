@@ -40,6 +40,32 @@ CREATE TABLE IF NOT EXISTS tickets (
   active BOOLEAN NOT NULL DEFAULT TRUE,
   UNIQUE (person_id, source_key)
 );
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS ticket_number INTEGER CHECK (ticket_number BETWEEN 100000 AND 999999);
+CREATE UNIQUE INDEX IF NOT EXISTS tickets_unique_number ON tickets(ticket_number);
+CREATE OR REPLACE FUNCTION next_ticket_number() RETURNS INTEGER AS $$
+DECLARE
+  candidate INTEGER;
+  start_number INTEGER;
+BEGIN
+  PERFORM pg_advisory_xact_lock(4262027);
+  FOR attempt IN 1..64 LOOP
+    candidate := 100000 + FLOOR(random() * 900000)::INTEGER;
+    IF NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_number=candidate) THEN
+      RETURN candidate;
+    END IF;
+  END LOOP;
+  start_number := candidate;
+  SELECT 100000 + ((n + start_number - 100000) % 900000) INTO candidate
+    FROM generate_series(0,899999) AS n
+    WHERE NOT EXISTS (SELECT 1 FROM tickets WHERE ticket_number=100000 + ((n + start_number - 100000) % 900000))
+    LIMIT 1;
+  IF candidate IS NULL THEN
+    RAISE EXCEPTION 'All six-digit ticket numbers are allocated. Contact the portal administrator.';
+  END IF;
+  RETURN candidate;
+END;
+$$ LANGUAGE plpgsql;
+ALTER TABLE tickets ALTER COLUMN ticket_number SET DEFAULT next_ticket_number();
 CREATE TABLE IF NOT EXISTS draws (
   id SERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL REFERENCES events(id),

@@ -103,7 +103,7 @@ test('browser: registration, verification, batch awards and sequential synchroni
     assert.ok(Date.now() - started >= 9900);
     await audience.getByRole('heading', { name: firstName, exact: true }).waitFor();
     await lateViewer.getByRole('heading', { name: firstName, exact: true }).waitFor();
-    const selectedCode = `CSI-${String(selection.draws[0].ticket_id).padStart(6, '0')}`;
+    const selectedCode = `CSI-${selection.draws[0].ticket_number}`;
     assert.equal(await admin.locator('#draw-stage .ticket-code').textContent(), selectedCode);
     assert.equal(await audience.locator('#draw-stage .ticket-code').textContent(), selectedCode);
     assert.equal(await audience.locator('#winners-list .winner-item').count(), 1);
@@ -118,7 +118,7 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await admin.getByRole('heading', { name: secondName, exact: true }).waitFor();
     assert.ok(Date.now() - started >= 21900);
     await audience.getByRole('heading', { name: secondName, exact: true }).waitFor();
-    const secondCode = `CSI-${String(selection.draws[1].ticket_id).padStart(6, '0')}`;
+    const secondCode = `CSI-${selection.draws[1].ticket_number}`;
     assert.equal(await audience.locator('#draw-stage .ticket-code').textContent(), secondCode);
     assert.equal(await audience.locator('#winners-list .winner-item').count(), 2);
     assert.equal(await admin.getByRole('button', { name: 'Roll & reveal' }).isDisabled(), true);
@@ -126,7 +126,7 @@ test('browser: registration, verification, batch awards and sequential synchroni
     await page.getByRole('region', { name: 'Your golden winning ticket' }).waitFor();
     await page.locator('.golden-ticket').getByText('You won A festive hamper.', { exact: true }).waitFor();
     const employeeDraw = selection.draws.find(draw => draw.person_id === names.find(p => p.name === 'Browser Employee').id);
-    assert.equal(await page.locator('.golden-ticket-stub strong').textContent(), `CSI-${String(employeeDraw.ticket_id).padStart(6, '0')}`);
+    assert.equal(await page.locator('.golden-ticket-stub strong').textContent(), `CSI-${employeeDraw.ticket_number}`);
     assert.ok((await page.locator('.golden-ticket blockquote').textContent()).includes('CSI'));
     const message = await page.locator('.golden-ticket blockquote').textContent();
     await page.getByRole('link', { name: 'Home', exact: true }).click();

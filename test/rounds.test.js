@@ -137,10 +137,12 @@ test('employee golden ticket exposes the winning number only after reveal, not a
     await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: person.email }).expect(200);
     const pending = (await employee.get('/api/me').expect(200)).body;
     assert.equal(pending.winning_ticket_id, null);
+    assert.equal(pending.winning_ticket_number, null);
     assert.equal(pending.won, null);
     await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [draw.id]);
     const winner = (await employee.get('/api/me').expect(200)).body;
     assert.equal(String(winner.winning_ticket_id), String(draw.ticket_id));
+    assert.equal(winner.winning_ticket_number, draw.ticket_number);
     assert.equal(winner.won, draw.prize_label);
     await h.pool.query('UPDATE events SET is_demo=TRUE WHERE id=1');
     await h.write('post', '/admin/events/1/reset-demo', { confirm: true }).expect(200);

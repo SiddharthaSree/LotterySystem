@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1366 768" preserveAspectRatio="none" fill="none">
+  <defs>
+    <radialGradient id="glow"><stop stop-color="#ffe4a0" stop-opacity=".6"/><stop offset="1" stop-color="#ffbf46" stop-opacity="0"/></radialGradient>
+    <linearGradient id="gold"><stop stop-color="#ad6619"/><stop offset=".5" stop-color="#ffe392"/><stop offset="1" stop-color="#bf7c20"/></linearGradient>
+    <linearGradient id="flame" x2="0" y2="1"><stop stop-color="#fff5ce"/><stop offset="1" stop-color="#ff9c26"/></linearGradient>
+    <g id="bulb"><circle r="20" fill="url(#glow)"/><circle r="5" fill="#ffdb7a"/></g>
+    <g id="diya"><ellipse cy="8" rx="72" ry="15" fill="#ffb63e" opacity=".14"/><path d="M-54-4Q0 68 54-4Z" fill="url(#gold)" stroke="#d88b30" stroke-width="2"/><ellipse cy="-4" rx="54" ry="11" fill="#6f214c" stroke="#f8cd76" stroke-width="3"/><path d="M0-12C-20-26-8-43 0-58C4-39 18-22 0-12Z" fill="url(#flame)"/><path d="M-31 9Q0 30 31 9M-21 25Q0 40 21 25" stroke="#fada86" stroke-width="2"/></g>
+    <g id="petal"><ellipse cy="-70" rx="19" ry="57" stroke="#d49b44"/><path d="M0-128Q-40-65 0-12Q40-65 0-128Z" stroke="#d49b44"/></g>
+    <g id="flower" opacity=".2">
+      <use href="#petal"/><use href="#petal" transform="rotate(30)"/><use href="#petal" transform="rotate(60)"/><use href="#petal" transform="rotate(90)"/><use href="#petal" transform="rotate(120)"/><use href="#petal" transform="rotate(150)"/><use href="#petal" transform="rotate(180)"/><use href="#petal" transform="rotate(210)"/><use href="#petal" transform="rotate(240)"/><use href="#petal" transform="rotate(270)"/><use href="#petal" transform="rotate(300)"/><use href="#petal" transform="rotate(330)"/><circle r="31" stroke="#d49b44"/><circle r="19" stroke="#d49b44"/>
+    </g>
+    <g id="lantern"><path d="M0-115V-30" stroke="#dfae54"/><circle cy="-27" r="5" stroke="#dfae54"/><path d="M-17-12 0-24 17-12 22 30 0 43-22 30Z" fill="url(#gold)" stroke="#ebba60"/><path d="M-12-8H12L15 25 0 34-15 25Z" fill="#ffca55"/><path d="M0-7V33M-12-8 15 25M12-8-15 25" stroke="#ab671a"/><path d="M0 43V58M-4 58H4" stroke="#e8b353" stroke-width="3"/></g>
+  </defs>
+  <path d="M0 3Q130 158 355 0M1011 0Q1225 158 1366 3" stroke="#c8923c" stroke-width="2"/>
+  <g><use href="#bulb" x="18" y="22"/><use href="#bulb" x="62" y="59"/><use href="#bulb" x="110" y="86"/><use href="#bulb" x="162" y="92"/><use href="#bulb" x="215" y="81"/><use href="#bulb" x="267" y="54"/><use href="#bulb" x="316" y="22"/>
+    <use href="#bulb" x="1050" y="22"/><use href="#bulb" x="1099" y="54"/><use href="#bulb" x="1151" y="81"/><use href="#bulb" x="1204" y="92"/><use href="#bulb" x="1256" y="86"/><use href="#bulb" x="1304" y="59"/><use href="#bulb" x="1348" y="22"/></g>
+  <use href="#lantern" transform="translate(52 154)"/><use href="#lantern" transform="translate(1314 154)"/>
+  <use href="#flower" transform="translate(16 720) scale(1.4)"/><use href="#flower" transform="translate(1350 720) scale(1.4)"/>
+  <ellipse cx="683" cy="750" rx="210" ry="17" stroke="#d3943b" opacity=".28"/>
+  <use href="#diya" transform="translate(555 724) scale(.7)"/><use href="#diya" transform="translate(683 717)"/><use href="#diya" transform="translate(811 724) scale(.7)"/>
+</svg>

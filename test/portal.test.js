@@ -166,6 +166,7 @@ test('parallel batch rolls award distinct people once, cap by prizes, and preser
   assert.equal(data.current_draw_id, batch.draws[0].id);
   assert.ok(data.draws.every(d => d.name === null));
   assert.equal(data.draws[0].ticket_id, null);
+  assert.equal(data.draws[0].ticket_number, null);
   await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE id=$1", [batch.draws[0].id]);
   data = (await h.admin.get(`/api/events/${event.id}/public`)).body;
   assert.equal(data.current_draw_id, batch.draws[0].id);
