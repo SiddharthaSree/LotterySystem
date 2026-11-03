@@ -2,7 +2,7 @@ const $ = selector => document.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const date = value => new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(new Date(value)) + ' IST';
 const ticketCode = id => `CSI-${String(id).padStart(6, '0')}`;
-const state = { session: {}, events: [], eventId: null, data: null, me: null, admin: null, tab: 'people', personId: null, authTab: 'signup', busy: false };
+const state = { session: {}, events: [], eventId: null, data: null, me: null, admin: null, tab: 'people', personId: null, authTab: 'signup', winnerRound: 'all', busy: false };
 let toastTimer;
 let serverClock = { time: Date.now(), received: performance.now() };
 let polling = false;
@@ -146,7 +146,6 @@ function settingsFields(event) {
   return `<div class="form-grid">
     <div class="span-two">${field('title', 'Event title', event.title, 'text', 'required maxlength="160"')}</div>
     <div class="span-two">${field('signup_closes_at', 'Public registration closes (IST)', cutoffInput(event.signup_closes_at), 'datetime-local', 'required')}</div>
-    <div class="span-two">${field('allowed_domains', 'Allowed signup email domains (comma-separated)', event.allowed_domains, 'text', 'required maxlength="500"')}</div>
     ${field('bonus_cap', 'Bonus-ticket cap per employee', event.bonus_cap, 'number', 'min="0" max="100" required')}
     ${field('prize_count', 'Number of prizes', event.prize_count, 'number', `min="1" max="1000" required ${event.rounds_managed ? 'readonly' : ''}`)}
   </div>`;
@@ -164,7 +163,12 @@ function updateHeader() {
   $('#event-picker').innerHTML = state.events.map(e => `<option value="${e.id}" ${e.id === state.eventId ? 'selected' : ''}>${escape(e.id === state.eventId ? state.data.event.title : e.title)}</option>`).join('');
   $('#event-status').outerHTML = badge(state.data.event.status).replace('<span ', '<span id="event-status" ');
   $('#signout').classList.toggle('hidden', !state.session.admin && !state.session.personId);
-  document.title = `${state.data.event.title} | Lucky Draw`;
+  $('#signout').textContent = state.session.admin ? 'Admin log out' : 'Log out';
+  $('#employee-access').textContent = state.me ? 'My tickets' : 'Employee log in';
+  $('#register-link').classList.toggle('hidden', Boolean(state.me || state.session.admin) || state.data.event.status === 'ended' || Date.now() >= new Date(state.data.event.signup_closes_at).getTime());
+  $('#session-label').classList.toggle('hidden', !state.session.admin && !state.session.personId);
+  $('#session-label').textContent = state.session.admin ? 'Signed in as coordinator' : state.me ? `Signed in: ${state.me.person.name}` : 'Employee session for another event';
+  document.title = `${state.data.event.title} | Diwali Celebration Draw`;
   document.querySelectorAll('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === route()));
 }
 
@@ -188,11 +192,12 @@ function renderHome() {
     <div class="ticket-art" aria-hidden="true"><div class="decorative-ticket"><div class="ticket-label">A LITTLE LUCK, JUST FOR YOU</div><div class="ticket-star">&#10022;</div><strong>YOUR NEXT BIG MOMENT</strong><div class="ticket-bottom"><span>ONE TEAM. MANY POSSIBILITIES.</span><span>01</span></div></div><p>PARTICIPATE &middot; CONNECT &middot; CELEBRATE</p></div>
   </section>
   <div class="stats">${stat(stats.participants, 'Approved participants')}${stat(stats.tickets, 'Tickets in the draw')}${stat(remaining, 'Prizes still available')}${stat(event.bonus_cap, 'Bonus tickets you can earn')}</div>
+  ${state.data.rounds.length ? `<section class="prize-showcase"><div class="section-heading"><div><p class="eyebrow">A little luck. A lot to celebrate.</p><h2>${event.prize_count} prizes across ${state.data.rounds.length} rounds</h2></div><a class="button light" href="#draw">View rounds &amp; winners</a></div><div class="grid">${state.data.rounds.map(r => `<article class="card"><p class="eyebrow">Round ${r.position}</p><h3>${escape(r.name)}</h3><p>${escape(r.prize_label)}</p><strong>${r.winner_count} winners</strong><p>${r.batch_size || r.winner_count} winners per roll &middot; ${Math.ceil(r.winner_count / (r.batch_size || r.winner_count))} roll${r.winner_count > (r.batch_size || r.winner_count) ? 's' : ''}</p></article>`).join('')}</div></section>` : ''}
   <div class="section-heading"><div><p class="eyebrow">Make your participation count</p><h2>Small actions. More chances.</h2></div><p class="muted small">One base ticket + up to ${event.bonus_cap} bonus tickets = up to ${event.bonus_cap + 1} tickets</p></div>
   ${activities(tasks)}
   <div class="notice">Participation is voluntary, and onsite and remote employees are equally welcome. Each activity counts once. More tickets improve your chances but never guarantee a prize. An internal alternative is available for the LinkedIn activity.</div>
   <div class="section-heading"><h2>Your route to the draw</h2></div>
-  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and work email. Your Project Manager (PM) approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Follow each activity's date and eligibility rules, then send proof through Teams. Your PM verifies it and allocates the bonus ticket through administrator access. Celebration-day winners can be verified before the draw while the event is Open or Live.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Celebrate your lucky moment</strong><p>Watch online or onsite, or check the winners later. Prizes are awarded even if you are offline. Each person can win only once per event.</p></div></div>`;
+  <div class="steps"><div><span class="step-number">01 / JOIN</span><strong>Register and get approved</strong><p>Enter your name and email address. Department is optional. Your Project Manager (PM) approves your entry and activates your base ticket.</p></div><div><span class="step-number">02 / PARTICIPATE</span><strong>Complete an activity</strong><p>Follow each activity's date and eligibility rules, then send proof through Teams. Your PM verifies it and allocates the bonus ticket through administrator access. Celebration-day winners can be verified before the draw while the event is Open or Live.</p></div><div><span class="step-number">03 / CELEBRATE</span><strong>Celebrate your lucky moment</strong><p>Watch online or onsite, or check the winners later. Prizes are awarded even if you are offline. Each person can win only once per event.</p></div></div>`;
 }
 
 function renderEmployee() {
@@ -200,12 +205,13 @@ function renderEmployee() {
   if (!state.me) {
     const signup = state.authTab === 'signup';
     const closed = event.status === 'ended' || Date.now() >= new Date(event.signup_closes_at).getTime();
-    return `<section class="auth-layout"><div class="auth-intro"><p class="eyebrow">Your celebration starts here</p><h1>One team.<br>A little more luck.</h1><p>Join with your name and email. Your coordinator will approve your entry, and you will be ready to earn tickets.</p><div class="notice">Allowed email domains: ${escape(event.allowed_domains)}<br>Registration deadline: ${escape(date(event.signup_closes_at))}</div><p class="small">This internal portal uses email-only access, not email verification. Do not enter sensitive information.</p></div>
-    <div class="card auth-card"><div class="tabs"><button data-auth="signup" class="${signup ? 'active' : ''}">Register</button><button data-auth="login" class="${!signup ? 'active' : ''}">Employee sign-in</button></div>
+    return `<section class="auth-layout"><div class="auth-intro"><p class="eyebrow">Your celebration starts here</p><h1>One team.<br>A little more luck.</h1><p>First visit? Register once. Already approved? Log in with the same email to see your tickets.</p><div class="notice">Any valid email address is accepted; PM approval is required.<br>Registration deadline: ${escape(date(event.signup_closes_at))}</div><p class="small">This internal portal uses email-only access, not email verification. Do not enter sensitive information.</p></div>
+    <div class="card auth-card"><div class="tabs"><button data-auth="signup" class="${signup ? 'active' : ''}">Register</button><button data-auth="login" class="${!signup ? 'active' : ''}">Employee log in</button></div>
     <h2>${signup ? 'Save your spot' : 'Welcome back'}</h2><p class="muted small">${signup ? 'Every entry is reviewed by an admin.' : 'Use the email address approved for this event.'}</p>
     ${signup && closed ? '<div class="notice">Public registration is closed. Contact an admin for a late entry, or sign in to your approved account.</div>' :
       `<form data-form="${signup ? 'signup' : 'employee-login'}">${signup ? field('name', 'Your name', '', 'text', 'required maxlength="100" autocomplete="name"') : ''}
       ${field('email', 'Email address', '', 'email', 'required maxlength="254" autocomplete="email"')}
+      ${signup ? field('department', 'Department (optional)', '', 'text', 'maxlength="80" placeholder="e.g. BU1, BU2 or HR"') : ''}
       <button class="primary full" type="submit">${signup ? 'Register for the event' : 'View my tickets'} &rarr;</button></form>`}
     </div></section>`;
   }
@@ -228,7 +234,11 @@ function renderEmployee() {
 
 function winnersList() {
   const wins = state.data.draws.filter(d => d.status === 'claimed' && !revealing(d)).slice().reverse();
-  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3><div class="winner-grid" tabindex="0" role="region" aria-label="Scroll through all winners">${wins.length ? wins.map((d, i) => `<div class="winner-item"><span class="winner-rank">${String(i + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_number)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div></div>`;
+  const rounds = state.data.rounds;
+  const filtered = state.winnerRound === 'all' ? wins : wins.filter(d => String(d.round_id) === state.winnerRound);
+  return `<div class="card" id="winners-list"><p class="eyebrow">The celebration roll</p><h3>Our lucky winners <span class="small">(${wins.length})</span></h3>
+    ${rounds.length ? `<div class="tabs winner-tabs" role="group" aria-label="Filter winners by round"><button data-winner-round="all" aria-pressed="${state.winnerRound === 'all'}" class="${state.winnerRound === 'all' ? 'active' : ''}">All (${wins.length})</button>${rounds.map(r => `<button data-winner-round="${r.id}" title="${escape(r.name)}" aria-pressed="${state.winnerRound === String(r.id)}" class="${state.winnerRound === String(r.id) ? 'active' : ''}">Round ${r.position} (${wins.filter(d => d.round_id === r.id).length})</button>`).join('')}</div>` : ''}
+    <div class="winner-grid" tabindex="0" role="region" aria-label="Scroll through all winners">${filtered.length ? filtered.map(d => `<div class="winner-item"><span class="winner-rank">${String(wins.indexOf(d) + 1).padStart(2, '0')}</span><div><strong>${escape(d.name)}</strong><p>${d.round_id ? `${escape(rounds.find(r => r.id === d.round_id)?.name || 'Round')} &middot; ` : ''}${escape(d.prize_label)} &middot; ${ticketCode(d.ticket_number)}</p></div></div>`).join('') : '<p>Winners will appear here as their tickets are revealed.</p>'}</div></div>`;
 }
 
 function stage() {
@@ -239,6 +249,7 @@ function stage() {
   const celebrate = visible?.status === 'claimed' && visible.reveal_ends_at > 0 &&
     serverNow() >= celebrationAt && serverNow() - celebrationAt < 5000;
   return `<div class="draw-stage" id="draw-stage">${celebrate ? confetti(celebrationAt) : ''}<p class="eyebrow">${escape(event.title)}</p>
+    ${visible?.round_id ? `<p class="stage-round">${escape(state.data.rounds.find(r => r.id === visible.round_id)?.name || '')}</p>` : ''}
     ${batch ? `<p class="batch-progress">Winner ${batch.current_position} of ${batch.winner_count}${batch.requested_count > batch.winner_count ? ` &middot; ${batch.requested_count} requested; ${batch.winner_count} available` : ''}</p>` : ''}
     ${rolling ? `<div class="ticket-reveal" data-reveal="${visible.id}" aria-busy="true">
       <span class="badge">The lucky ticket is on its way</span><h2>Let the luck roll!</h2>
@@ -265,7 +276,7 @@ function drawHelp() {
 
 function renderDraw(admin = false) {
   const { event, remaining } = state.data;
-  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>The live lucky draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${resetDemoButton()}</div>`}
+  return `${!admin ? `<div class="page-heading"><div class="draw-heading"><img class="company-logo presentation-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><div><p class="eyebrow">A shared moment of possibility</p><h1>Diwali Celebration Draw</h1><p>One fair draw. One prize per person. All eyes on the next name.</p></div></div><div class="actions">${resetDemoButton()}<button class="secondary" data-action="fullscreen">${presentation ? 'Exit presentation' : 'Presentation mode &#8599;'}</button></div></div>` : `<div class="actions">${resetDemoButton()}</div>`}
     <div class="draw-layout"><div class="draw-main">${stage()}<p class="sound-status" id="sound-status" role="status">${escape(soundStatus)}</p>
     ${state.data.rounds.length ? roundControls() : admin ? `<form data-form="draw" class="card"><h3>Roll for your next winners</h3>${field('prize_label', 'Prize name for this selection', '', 'text', 'maxlength="160" placeholder="e.g. Festive gift hamper"')}
       ${field('winner_count', 'Number of winners', 1, 'number', 'min="1" max="1000" required')}
@@ -286,13 +297,16 @@ function roundControls() {
   const pages = Math.max(1, Math.ceil(rounds.length / 3));
   roundPage = Math.min(roundPage, pages - 1);
   const shown = presentation ? rounds.slice(roundPage * 3, roundPage * 3 + 3) : rounds;
+  const nextCount = next ? Math.min(next.batch_size || next.winner_count, next.winner_count - (next.awarded_count || 0)) : 0;
+  const shortage = state.data.stats.eligible_employees < state.data.remaining;
   return `<section class="card round-controls" id="round-controls"><p class="eyebrow">Planned rounds</p>
     <div class="round-grid">${shown.map(round => `<div class="round-summary"><div><strong>${escape(round.name)}</strong><p>${escape(round.prize_label)} &middot; ${round.winner_count} planned winner${round.winner_count === 1 ? '' : 's'}</p>
-      ${round.rolled_at ? `<p>${round.awarded_count} awarded${round.awarded_count < round.winner_count ? ` &middot; ${round.winner_count - round.awarded_count} unfilled (not enough eligible employees)` : ''}</p>` : ''}</div>
+      <p>${round.awarded_count || 0}/${round.winner_count} awarded &middot; ${round.rolls_completed || 0}/${Math.ceil(round.winner_count / (round.batch_size || round.winner_count))} rolls${round.rolled_at && round.awarded_count < round.winner_count ? ` &middot; ${round.winner_count - round.awarded_count} unfilled` : ''}</p></div>
       ${badge(round.rolled_at ? batch?.active && round.batch_id === batch.id ? 'revealing' : 'complete' : next?.id === round.id ? 'next' : 'upcoming')}</div>`).join('')}</div>
     ${presentation && pages > 1 ? `<div class="presentation-pages"><button class="secondary" data-round-page="-1" ${roundPage === 0 ? 'disabled' : ''}>Previous rounds</button><span>${roundPage + 1} / ${pages}</span><button class="secondary" data-round-page="1" ${roundPage === pages - 1 ? 'disabled' : ''}>Next rounds</button></div>` : ''}
-    ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active ? 'disabled' : ''}>Roll ${escape(next.name)} &rarr;</button>` : ''}
-      <p class="helper">${batch?.active ? 'Watch this round finish revealing before the next roll.' : event.status !== 'live' ? 'The coordinator will start the event soon.' : `Next: ${escape(next.name)}. ${state.session.admin ? 'The saved prize and winner count will be used automatically.' : 'Waiting for the coordinator to roll.'}`}</p>` :
+    ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active ? 'disabled' : ''}>Roll ${escape(next.name)} &mdash; ${nextCount} winners (roll ${(next.rolls_completed || 0) + 1}/${Math.ceil(next.winner_count / (next.batch_size || next.winner_count))}) &rarr;</button>` : ''}
+      <p class="helper">${batch?.active ? 'Watch this roll finish revealing before the next roll.' : event.status !== 'live' ? 'The coordinator will start the event soon.' : `Next: ${escape(next.name)}. ${state.session.admin ? 'The saved prize and winner count will be used automatically.' : 'Waiting for the coordinator to roll.'}`}</p>
+      ${state.session.admin ? `<p class="readiness ${shortage ? 'shortage' : ''}">${state.data.stats.eligible_employees} eligible employees for ${state.data.remaining} remaining prizes.${shortage ? ' Approve more employees before rolling; shortages are recorded as unfilled.' : ' Ready to fill all prizes.'}</p>` : ''}` :
       `<p class="notice green">${batch?.active ? 'The final round is revealing.' : 'All rounds are complete.'}</p>`}
     </section>`;
 }
@@ -302,13 +316,14 @@ function roundRow(round = {}) {
     ${field('round_name', 'Round name', round.name || '', 'text', 'required maxlength="160"')}
     ${field('round_prize', 'Round prize', round.prize_label || '', 'text', 'required maxlength="160"')}
     ${field('round_winners', 'Round winners', round.winner_count || 1, 'number', 'min="1" max="1000" required')}
+    ${field('round_batch', 'Winners per roll', round.batch_size || round.winner_count || 1, 'number', 'min="1" max="1000" required')}
     <button class="secondary" type="button" data-action="remove-round">Remove round</button></div>`;
 }
 
 function roundPlanner() {
   const { event, draws, rounds } = state.data;
   const locked = event.status !== 'open' || event.rounds_locked_at || draws.length;
-  return `<section class="card"><h2>Round planner</h2><p class="muted small">Set round names, prizes, and winner counts in order. The total becomes the event prize count. Save the plan before going Live; it then locks permanently, even if you return the event to Open.</p>
+  return `<section class="card"><h2>Round planner</h2><p class="muted small">Set round names, prizes, total winners, and winners per roll. For example, 15 winners with 5 per roll means three rolls in that round. Each winner is revealed separately for 10 seconds. The total becomes the event prize count. Save before going Live; the plan then locks permanently.</p>
     ${locked ? `<div class="notice">The plan cannot be changed after going Live or after any draw. ${rounds.length ? 'Run the saved rounds from the public draw page while signed in as an admin.' : 'This event keeps its existing manual batch draw. Use a new event for planned rounds.'}</div>${rounds.length ? roundControls() : ''}` :
       `<form data-form="round-plan"><div id="round-editor-rows">${(rounds.length ? rounds : [{ name: 'Round 1', winner_count: 1 }]).map(roundRow).join('')}</div>
       <div class="actions"><button type="button" class="secondary" data-action="add-round">Add round</button><button class="primary">Save round plan</button></div><p class="helper">Maximum 100 rounds and 1000 total prizes. If a round has too few eligible employees, available winners are awarded and the remaining prizes are recorded as unfilled.</p></form>`}
@@ -316,7 +331,7 @@ function roundPlanner() {
 }
 
 function drawHistory() {
-  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${revealing(d) ? 'Reveal in progress...' : escape(d.name)}</td><td>${escape(d.prize_label)}</td><td>${revealing(d) ? 'CSI-??????' : ticketCode(d.ticket_number)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Selected employee</th><th>Round / prize</th><th>Ticket</th><th>Status</th><th>Selected at</th></tr></thead><tbody>${state.data.draws.map(d => `<tr><td>${revealing(d) ? 'Reveal in progress...' : escape(d.name)}</td><td>${escape(state.data.rounds.find(r => r.id === d.round_id)?.name || '')}<span class="small">${escape(d.prize_label)}</span></td><td>${revealing(d) ? 'CSI-??????' : ticketCode(d.ticket_number)}</td><td>${badge(d.status)}</td><td>${escape(date(d.created_at))}</td></tr>`).join('') || '<tr><td colspan="5">No selections yet.</td></tr>'}</tbody></table></div>`;
 }
 
 function renderPeople() {
@@ -324,10 +339,11 @@ function renderPeople() {
   const person = people.find(p => p.id === state.personId);
   const ended = state.data.event.status === 'ended';
   return `<div class="section-heading"><div><h2>People &amp; verification</h2><p class="muted small">Approve entries and mark Teams-verified activities as done.</p></div><button class="secondary" data-action="refresh">Refresh entries</button></div>
-    <div class="verification-layout"><div><label class="field">Find an employee<input id="people-search" type="search" placeholder="Search name or email" autocomplete="off"></label>
-    <div class="table-wrap"><table><thead><tr><th>Employee</th><th>Status</th><th>Tickets</th><th>Manage</th></tr></thead><tbody id="people-rows">${people.map(p => `<tr data-search="${escape(`${p.name} ${p.email}`.toLowerCase())}"><td><strong>${escape(p.name)}</strong><span class="small">${escape(p.email)}</span></td><td>${badge(p.won ? 'winner' : p.approved ? 'approved' : 'pending')}</td><td>${p.approved && !p.won ? p.ticket_count : 0}<span class="small">${p.ticket_count} allocated</span></td><td><button class="secondary" data-person="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="4">No entries yet. Share the portal link to get started.</td></tr>'}</tbody></table></div>
-    <details class="card"><summary>Add an employee (also after the cutoff)</summary><p class="helper">Admin-added entries are approved immediately and can use any email domain.</p><form data-form="add-person">${field('name', 'Name', '', 'text', 'required maxlength="100"')}${field('email', 'Email', '', 'email', 'required maxlength="254"')}<button class="primary" ${ended ? 'disabled' : ''}>Add approved employee</button></form></details></div>
+    <div class="verification-layout"><div><label class="field">Find an employee<input id="people-search" type="search" placeholder="Search name, email or department" autocomplete="off"></label>
+    <div class="table-wrap"><table><thead><tr><th>Employee / department</th><th>Status</th><th>Tickets</th><th>Manage</th></tr></thead><tbody id="people-rows">${people.map(p => `<tr data-search="${escape(`${p.name} ${p.email} ${p.department}`.toLowerCase())}"><td><strong>${escape(p.name)}</strong><span class="small">${escape(p.email)}</span><span class="small">${escape(p.department || 'Department not provided')}</span></td><td>${badge(p.won ? 'winner' : p.approved ? 'approved' : 'pending')}</td><td>${p.approved && !p.won ? p.ticket_count : 0}<span class="small">${p.ticket_count} allocated</span></td><td><button class="secondary" data-person="${p.id}">Manage</button></td></tr>`).join('') || '<tr><td colspan="4">No entries yet. Share the portal link to get started.</td></tr>'}</tbody></table></div>
+    <details class="card"><summary>Add an employee (also after the cutoff)</summary><p class="helper">Admin-added entries are approved immediately and can use any email domain.</p><form data-form="add-person">${field('name', 'Name', '', 'text', 'required maxlength="100"')}${field('email', 'Email', '', 'email', 'required maxlength="254"')}${field('department', 'Department (optional)', '', 'text', 'maxlength="80" placeholder="e.g. BU1, BU2 or HR"')}<button class="primary" ${ended ? 'disabled' : ''}>Add approved employee</button></form></details></div>
     <aside class="card">${person ? `<p class="eyebrow">Employee verification</p><h3>${escape(person.name)}</h3><p>${escape(person.email)}</p><label class="check-row"><input type="checkbox" data-approve="${person.id}" ${person.approved ? 'checked' : ''} ${ended ? 'disabled' : ''}><span>Approved for this event</span></label>
+    <form data-form="department" data-owner="${person.id}">${field('department', 'Department (optional)', person.department, 'text', 'maxlength="80" placeholder="e.g. BU1, BU2 or HR"')}<button class="secondary" ${ended ? 'disabled' : ''}>Save department</button><p class="helper">For coordinator reference only; not shown on the public draw.</p></form>
     <p class="helper">PMs: verify the activity rules and evidence through Teams before ticking Done. Quiz/game participation alone is not a win. Celebration-day tickets can be added before the draw while Open or Live. Unticking reverses the reward; the event cap applies automatically.</p>
     ${tasks.map(t => `<label class="check-row"><input type="checkbox" data-complete="${t.id}" data-owner="${person.id}" ${completions.some(c => c.person_id === person.id && c.task_id === t.id && c.done) ? 'checked' : ''} ${ended || !t.active ? 'disabled' : ''}><span>${escape(t.title)}${!t.active ? ' (inactive)' : ''}<br><small>+${t.reward} ticket${t.reward === 1 ? '' : 's'}</small></span></label>`).join('')}
     <form data-form="manual-bonus" data-owner="${person.id}">${field('extra_bonus', 'Additional admin bonus (subject to event cap)', person.extra_bonus, 'number', 'min="0" max="100" required')}<button class="secondary" ${ended ? 'disabled' : ''}>Save admin bonus</button></form>
@@ -424,6 +440,7 @@ document.addEventListener('submit', event => {
         name: row.querySelector('[name="round_name"]').value,
         prize_label: row.querySelector('[name="round_prize"]').value,
         winner_count: row.querySelector('[name="round_winners"]').value,
+        batch_size: row.querySelector('[name="round_batch"]').value,
       }));
       await api(adminPath('/rounds'), 'PUT', { rounds: body.rounds });
     }
@@ -437,6 +454,7 @@ document.addEventListener('submit', event => {
       await api(adminPath(`/tasks${form.dataset.task ? `/${form.dataset.task}` : ''}`), form.dataset.task ? 'PATCH' : 'POST', body);
     } else if (type === 'add-person') await api(adminPath('/people'), 'POST', body);
     else if (type === 'manual-bonus') await api(adminPath(`/people/${form.dataset.owner}`), 'PATCH', body);
+    else if (type === 'department') await api(adminPath(`/people/${form.dataset.owner}`), 'PATCH', body);
     else if (type === 'draw') drawResult = await api(adminPath('/draw'), 'POST', body);
     state.events = await api('/events');
     await refresh();
@@ -446,12 +464,18 @@ document.addEventListener('submit', event => {
 });
 
 document.addEventListener('click', event => {
+  const access = event.target.closest('[data-employee-auth]');
+  if (access) {
+    state.authTab = access.dataset.employeeAuth;
+    if (state.data && route() === 'employee') render();
+  }
   const button = event.target.closest('button');
   if (!button || button.disabled) return;
   if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
+  else if (button.dataset.winnerRound) { state.winnerRound = button.dataset.winnerRound; render(); }
   else if (button.dataset.action === 'reset-demo') action(async () => {
     if (!confirm('Reset this demo? Its winners and round progress will be cleared. Employees, tickets, and round settings stay unchanged. Real events are not affected.')) return;
     await api(adminPath('/reset-demo'), 'POST', { confirm: true });
@@ -493,6 +517,7 @@ document.addEventListener('change', event => {
   if (input.id === 'event-picker') action(async () => {
     state.eventId = Number(input.value);
     state.personId = null;
+    state.winnerRound = 'all';
     setEventUrl();
     await refresh();
   });

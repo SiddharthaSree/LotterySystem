@@ -2,13 +2,14 @@ CREATE TABLE IF NOT EXISTS events (
   id SERIAL PRIMARY KEY,
   title TEXT NOT NULL,
   signup_closes_at TIMESTAMPTZ NOT NULL,
-  allowed_domains TEXT NOT NULL DEFAULT 'gmail.com',
+  allowed_domains TEXT NOT NULL DEFAULT '',
   bonus_cap INTEGER NOT NULL DEFAULT 4 CHECK (bonus_cap BETWEEN 0 AND 100),
   prize_count INTEGER NOT NULL DEFAULT 5 CHECK (prize_count BETWEEN 1 AND 1000),
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'live', 'ended')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ALTER TABLE events ALTER COLUMN bonus_cap SET DEFAULT 4;
+ALTER TABLE events ALTER COLUMN allowed_domains SET DEFAULT '';
 CREATE TABLE IF NOT EXISTS people (
   id SERIAL PRIMARY KEY,
   event_id INTEGER NOT NULL REFERENCES events(id),
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   reward INTEGER NOT NULL DEFAULT 1 CHECK (reward BETWEEN 0 AND 100),
   active BOOLEAN NOT NULL DEFAULT TRUE
 );
+ALTER TABLE people ADD COLUMN IF NOT EXISTS department TEXT NOT NULL DEFAULT '' CHECK (length(department)<=80);
 CREATE TABLE IF NOT EXISTS completions (
   person_id INTEGER NOT NULL REFERENCES people(id),
   task_id INTEGER NOT NULL REFERENCES tasks(id),
@@ -103,5 +105,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   details JSONB NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE rounds ADD COLUMN IF NOT EXISTS batch_size INTEGER CHECK (batch_size BETWEEN 1 AND winner_count);
+ALTER TABLE rounds ADD COLUMN IF NOT EXISTS rolls_completed INTEGER NOT NULL DEFAULT 0 CHECK (rolls_completed>=0);
+ALTER TABLE draws ADD COLUMN IF NOT EXISTS round_id INTEGER REFERENCES rounds(id);
+UPDATE draws d SET round_id=r.id FROM rounds r WHERE d.round_id IS NULL AND d.event_id=r.event_id AND d.batch_id=r.batch_id;
+UPDATE rounds SET rolls_completed=1 WHERE rolled_at IS NOT NULL AND rolls_completed=0;
 CREATE INDEX IF NOT EXISTS tickets_person ON tickets(person_id);
 CREATE INDEX IF NOT EXISTS people_event ON people(event_id);

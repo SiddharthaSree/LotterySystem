@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { harness } from './helpers.js';
+import { celebrationPlan } from '../scripts/update-celebration-plan.js';
 
 test('presentation fits projector and laptop screens with internally scrolling winners and live round control', async () => {
   const h = await harness();
@@ -10,17 +11,17 @@ test('presentation fits projector and laptop screens with internally scrolling w
   let browser;
   try {
     await h.pool.query('UPDATE events SET is_demo=TRUE WHERE id=1');
-    const plan = [
-      { name: 'Round 1', prize_label: 'Gift hamper', winner_count: 10 },
-      { name: 'Round 2', prize_label: 'Shopping voucher', winner_count: 4 },
-      { name: 'Round 3', prize_label: 'Surprise gift', winner_count: 3 },
-    ];
+    const plan = celebrationPlan;
     await h.write('put', '/admin/events/1/rounds', { rounds: plan }).expect(200);
-    for (let i = 1; i <= 15; i++) await h.add(`Demo Employee ${String(i).padStart(2, '0')}`, `demo${i}@example.com`);
-    await h.write('patch', '/admin/events/1', { ...h.settings, prize_count: 17, status: 'live' }).expect(200);
+    for (let i = 1; i <= 40; i++) await h.add(`Demo Employee ${String(i).padStart(2, '0')}`, `demo${i}@example.com`);
+    await h.write('patch', '/admin/events/1', { ...h.settings, prize_count: 25, status: 'live' }).expect(200);
     const data = (await h.admin.get('/api/events/1/public')).body;
     await h.write('post', `/admin/events/1/rounds/${data.rounds[0].id}/roll`, {}).expect(201);
     await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE event_id=1");
+    for (let roll = 0; roll < 2; roll++) {
+      await h.write('post', `/admin/events/1/rounds/${data.rounds[0].id}/roll`, {}).expect(201);
+      await h.pool.query("UPDATE draws SET reveal_at=NOW()-INTERVAL '1 second' WHERE event_id=1");
+    }
     browser = await chromium.launch();
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -59,17 +60,23 @@ test('presentation fits projector and laptop screens with internally scrolling w
         await page.keyboard.press('Home');
       }
     }
-    assert.equal(await page.locator('#winners-list .winner-item').count(), 10);
+    assert.equal(await page.locator('#winners-list .winner-item').count(), 15);
     assert.equal(await page.getByRole('button', { name: 'Next winners' }).count(), 0);
-    assert.ok(await page.getByRole('button', { name: 'Roll Round 2' }).isVisible());
+    assert.ok(await page.getByRole('button', { name: 'Roll Celebration Rewards' }).isVisible());
+    await page.getByRole('button', { name: 'Round 2 (0)', exact: true }).click();
+    assert.equal(await page.locator('#winners-list .winner-item').count(), 0);
+    await page.getByRole('button', { name: 'Round 1 (15)', exact: true }).click();
+    assert.equal(await page.locator('#winners-list .winner-item').count(), 15);
+    assert.ok(await page.locator('#winners-list .winner-item').first().textContent().then(text => text.includes('Festive Rewards')));
+    await page.getByRole('button', { name: 'All (15)', exact: true }).click();
     await page.getByRole('button', { name: 'Exit presentation' }).click();
     await page.waitForFunction(() => !document.fullscreenElement);
-    assert.equal(await page.locator('#winners-list .winner-item').count(), 10);
+    assert.equal(await page.locator('#winners-list .winner-item').count(), 15);
     assert.equal(await page.locator('#app').evaluate(el => el.classList.contains('presentation')), false);
     await page.setViewportSize({ width: 1024, height: 600 });
     await page.getByRole('button', { name: 'Presentation mode' }).click();
     await page.waitForFunction(() => document.fullscreenElement?.classList.contains('presentation'));
-    await page.getByRole('button', { name: 'Roll Round 2' }).click();
+    await page.getByRole('button', { name: 'Roll Celebration Rewards' }).click();
     await page.getByRole('heading', { name: 'Let the luck roll!', exact: true }).waitFor();
     assert.equal(await page.evaluate(() => {
       const app = document.querySelector('#app');

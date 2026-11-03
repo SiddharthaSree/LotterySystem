@@ -5,19 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#350543">
   <meta name="description" content="Celebrate together. Employee engagement, verified tickets, and a fair live lucky draw.">
-  <title>CSI Lucky Draw</title>
+  <title>Diwali Celebration Draw</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="#home" aria-label="CSI Solution Lucky Draw home"><img class="company-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><span>THE LUCKY DRAW<span class="brand-sub">A little participation. A lot of possibility.</span></span></a>
+    <a class="brand" href="#home" aria-label="CSI Solution Diwali Celebration Draw home"><img class="company-logo" src="/company-logo.png" alt="CSI Solution" width="1585" height="592"><span>Diwali Celebration Draw<span class="brand-sub">One team. A brighter celebration.</span></span></a>
     <nav aria-label="Main navigation">
       <a href="#home" data-nav="home">Home</a>
       <a href="#draw" data-nav="draw">Live draw <span class="live-dot"></span></a>
-      <a href="#employee" data-nav="employee">My tickets</a>
-      <a href="#admin" data-nav="admin">Admin</a>
+      <a href="#employee" data-nav="employee" id="employee-access" data-employee-auth="login">Employee log in</a>
+      <a href="#employee" id="register-link" data-employee-auth="signup">Register</a>
+      <button id="signout" class="secondary hidden" type="button">Log out</button>
     </nav>
   </header>
   <div class="event-bar">
@@ -25,10 +26,10 @@
     <select id="event-picker" aria-label="Choose event"></select>
     <span id="event-status" class="badge"></span>
     <span class="timezone">All event times are in India Standard Time</span>
-    <button id="signout" class="text-button hidden" type="button">Sign out</button>
+    <span id="session-label" class="small hidden"></span>
   </div>
   <main id="app" tabindex="-1"><div class="empty-state"><span class="spinner"></span><h1>Getting the celebration ready...</h1></div></main>
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
-  <footer><span>Made for moments that bring us together.</span><span>Verified participation. Equal opportunity. One prize per person.</span></footer>
+  <footer><span>Made for moments that bring us together.</span><span>Verified participation. Equal opportunity. One prize per person.</span><a href="#admin" data-nav="admin">Admin access</a></footer>
 </body>
 </html>

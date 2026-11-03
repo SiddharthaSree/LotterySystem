@@ -28,24 +28,26 @@ test('native draw recordings have a nine-second crescendo and audible ta-da fanf
   }
 });
 
-test('employee signup is pending, restricted by domain, approved by admin, then email-only login works', async () => {
+test('employee signup accepts any valid email, requires approval, and then email-only login works', async () => {
   const employee = request.agent(h.app);
   let csrf = (await employee.get('/api/session')).body.csrf;
-  await employee.post('/api/events/1/signup').set('x-csrf-token', csrf).send({ name: 'Wrong domain', email: 'someone@example.com' }).expect(400);
-  let response = await employee.post('/api/events/1/signup').set('x-csrf-token', csrf).send({ name: 'Asha', email: 'ASHA@gmail.com' }).expect(201);
+  await employee.post('/api/events/1/signup').set('x-csrf-token', csrf).send({ name: 'Invalid email', email: 'not-an-email' }).expect(400);
+  let response = await employee.post('/api/events/1/signup').set('x-csrf-token', csrf).send({ name: 'Asha', email: 'ASHA@example.com', department: ' BU1 ' }).expect(201);
   csrf = response.body.csrf;
   const me = (await employee.get('/api/me').expect(200)).body;
   assert.equal(me.person.approved, false);
+  assert.equal(me.person.department, 'BU1');
   assert.equal(me.tickets.length, 1);
   await employee.post('/api/logout').set('x-csrf-token', csrf).send({}).expect(200);
   csrf = (await employee.get('/api/session')).body.csrf;
-  await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: 'asha@gmail.com' }).expect(401);
+  await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: 'asha@example.com' }).expect(401);
   await h.write('patch', `/admin/events/1/people/${me.person.id}`, { approved: true }).expect(200);
-  response = await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: 'asha@gmail.com' }).expect(200);
+  response = await employee.post('/api/events/1/login').set('x-csrf-token', csrf).send({ email: 'asha@example.com' }).expect(200);
   assert.ok(response.body.csrf);
   assert.equal((await employee.get('/api/me')).body.person.approved, true);
   const publicData = (await employee.get('/api/events/1/public')).body;
-  assert.equal(JSON.stringify(publicData).includes('asha@gmail.com'), false);
+  assert.equal(JSON.stringify(publicData).includes('asha@example.com'), false);
+  assert.equal(JSON.stringify(publicData).includes('BU1'), false);
 });
 
 test('registration closes at its cutoff, while admins can add late entries', async () => {
@@ -99,7 +101,7 @@ test('admin writes require both admin authentication and CSRF; bad credentials d
   await agent.post('/api/admin/login').set('x-csrf-token', csrf).send({ email: h.config.adminEmail, password: 'wrong' }).expect(401);
   await h.admin.patch('/api/admin/events/1').send(h.settings).expect(403);
   await h.write('patch', '/admin/events/1', { ...h.settings, bonus_cap: 1.5 }).expect(400);
-  await h.write('patch', '/admin/events/1', { ...h.settings, allowed_domains: 'gmail' }).expect(400);
+  await h.write('patch', '/admin/events/1', { ...h.settings, allowed_domains: 'obsolete-domain-setting' }).expect(200);
 });
 
 test('batch draws automatically award offline winners, clamp capacity, and exclude all their tickets', async () => {
