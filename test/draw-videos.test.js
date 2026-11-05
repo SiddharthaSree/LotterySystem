@@ -114,6 +114,7 @@ test('browser video overlay synchronizes public screens, survives fullscreen, re
     await audience.getByRole('button', { name: 'Play / resume with sound', exact: true }).click();
     await audience.waitForFunction(() => document.querySelector('#video-overlay video').currentTime > 0);
     await page.locator('#video-overlay video').waitFor();
+    await page.getByText('Diwali wishes from our Management', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Play / resume with sound', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#video-overlay video').currentTime > .5);
     const duration = await page.locator('#video-overlay video').evaluate(v => v.duration);
@@ -132,9 +133,19 @@ test('browser video overlay synchronizes public screens, survives fullscreen, re
     assert.equal(await audience.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
     await h.pool.query("UPDATE video_playbacks SET started_at=NOW()-INTERVAL '100 seconds'");
     await page.waitForFunction(() => !document.querySelector('[data-action="video-finish"]').disabled);
-    await page.getByRole('button', { name: 'Return to draw', exact: true }).click();
+    let finishAttempts = 0;
+    await page.route('**/videos/*/finish', async route => {
+      finishAttempts++;
+      if (finishAttempts === 1) await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Temporary test outage' }) });
+      else await route.continue();
+    });
+    await page.locator('#video-overlay video').evaluate(v => { v.currentTime = v.duration - .2; });
+    await page.getByRole('button', { name: 'Play / resume with sound', exact: true }).click();
+    await page.getByText('The video has finished, but returning to the draw failed.', { exact: false }).waitFor();
     await audience.locator('#video-overlay').waitFor({ state: 'detached' });
     await page.locator('#video-overlay').waitFor({ state: 'detached' });
+    assert.ok(finishAttempts >= 2, 'Automatic completion retries after a transient failure');
+    await page.unroute('**/videos/*/finish');
     assert.equal((await h.pool.query('SELECT * FROM draws')).rows.length, 0);
     assert.equal(await page.locator('[data-roll-round]').isDisabled(), false);
     await page.evaluate(() => document.exitFullscreen());
@@ -158,6 +169,39 @@ test('browser video overlay synchronizes public screens, survives fullscreen, re
       assert.ok(Math.abs(meta - video.duration) < .1);
     }
     assert.deepEqual(errors, []);
+  } finally {
+    await browser?.close();
+    await new Promise(resolve => server.close(resolve));
+    await h.pool.end();
+  }
+});
+
+test('real first greeting plays through and automatically returns to manual draw without a Return click', async () => {
+  const h = await harness();
+  const server = h.app.listen(0, '127.0.0.1');
+  await new Promise(resolve => server.once('listening', resolve));
+  let browser;
+  try {
+    await prepare(h);
+    browser = await chromium.launch();
+    const page = await browser.newPage();
+    const base = `http://127.0.0.1:${server.address().port}`;
+    await page.goto(`${base}/#admin`);
+    await page.getByLabel('Admin email').fill(h.config.adminEmail);
+    await page.getByLabel('Admin password').fill(h.config.adminPassword);
+    await page.getByRole('button', { name: 'Sign in to admin' }).click();
+    await page.getByRole('link', { name: 'Live draw' }).click();
+    await page.getByRole('button', { name: 'Play Round 1 Greeting', exact: true }).click();
+    await page.locator('#video-overlay video').waitFor();
+    await page.getByRole('button', { name: 'Play / resume with sound', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('#video-overlay video')?.currentTime > 1);
+    await page.locator('#video-overlay').waitFor({ state: 'detached', timeout: 95000 });
+    assert.equal(await page.locator('[data-roll-round]').isDisabled(), false);
+    assert.equal((await h.pool.query('SELECT * FROM draws')).rows.length, 0);
+    const playback = (await h.pool.query('SELECT * FROM video_playbacks')).rows[0];
+    assert.ok(playback.completed_at);
+    assert.equal(playback.skipped, false);
+    assert.ok(new Date(playback.completed_at) - new Date(playback.started_at) >= drawVideos[0].duration * 1000);
   } finally {
     await browser?.close();
     await new Promise(resolve => server.close(resolve));

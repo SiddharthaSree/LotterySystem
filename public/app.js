@@ -140,8 +140,8 @@ function syncVideo() {
     layer.setAttribute('role', 'dialog');
     layer.setAttribute('aria-modal', 'true');
     layer.setAttribute('aria-label', info.title);
-    layer.innerHTML = `<div class="video-heading"><div><p class="eyebrow">Diwali wishes from our offshore team</p><h2>${escape(info.title)}</h2></div></div>
-      <video playsinline preload="auto" controls aria-label="${escape(info.title)}" src="${escape(info.src)}"></video>
+    layer.innerHTML = `<div class="video-heading"><div><p class="eyebrow">Diwali wishes from our Management</p><h2>${escape(info.title)}</h2></div></div>
+      <video playsinline preload="auto" controls aria-label="${escape(info.title)}"></video>
       <p class="video-status" role="status">Loading the greeting...</p><div class="actions">
       <button class="secondary" data-action="video-retry">Play / resume with sound</button>
       ${state.session.admin ? '<button class="secondary" data-action="video-finish" disabled>Return to draw</button><button class="secondary" data-action="video-skip">Skip video</button>' : ''}</div>`;
@@ -158,9 +158,16 @@ function syncVideo() {
       status.textContent = 'Video could not load. Use Play / resume to retry, or ask the coordinator to skip it.';
     });
     video.addEventListener('ended', () => {
-      status.textContent = 'Greeting complete. Waiting for the coordinator to return to the draw.';
-      if (state.session.admin) action(() => finishVideo());
+      layer.dataset.ended = 'true';
+      status.textContent = state.session.admin ? 'Greeting complete. Returning to the draw automatically...' :
+        'Greeting complete. Waiting for the coordinator screen to return to the draw.';
     });
+    video.addEventListener('stalled', () => {
+      status.textContent = 'Video download is taking longer than expected. Select Play / resume to retry if it does not continue.';
+    });
+    // Install media listeners before starting the request, including for cached videos.
+    video.src = info.src;
+    video.load();
     layer.querySelector('[data-action="video-retry"]').focus();
   }
   const finish = layer.querySelector('[data-action="video-finish"]');
@@ -168,12 +175,29 @@ function syncVideo() {
   // Late audience screens catch up to the shared timeline, without restarting on each poll.
   const video = layer.querySelector('video');
   const elapsed = (serverNow() - new Date(playback.started_at).getTime()) / 1000;
+  // An ended event can arrive just before the server deadline or during another action.
+  // Recheck until completion is saved rather than dropping the one-shot notification.
+  if (state.session.admin && (video.ended || layer.dataset.ended === 'true') &&
+      elapsed >= info.duration + .25 && !state.busy && !polling &&
+      serverNow() >= Number(layer.dataset.nextFinishAt || 0)) {
+    layer.dataset.nextFinishAt = String(serverNow() + 5000);
+    action(async () => {
+      try { await finishVideo(); }
+      catch (error) {
+        const status = layer.querySelector('.video-status');
+        status.textContent = 'The video has finished, but returning to the draw failed. Retrying automatically; you can also select Return to draw.';
+        throw error;
+      }
+    });
+  }
   if (!state.session.admin && video.readyState >= 2 && !video.paused && elapsed < info.duration && Math.abs(video.currentTime - elapsed) > 3) {
     video.currentTime = Math.max(0, elapsed);
   }
 }
 
 function playGreeting(video) {
+  const layer = $('#video-overlay');
+  if (layer && !video.ended) delete layer.dataset.ended;
   video.play().catch(error => {
     const status = $('#video-overlay .video-status');
     if (status) status.textContent = error.name === 'NotAllowedError' ?
