@@ -86,7 +86,7 @@ function startDrumroll(draw) {
 function updateDrawSound() {
   if (unlockingAudio) return;
   const onDraw = route() === 'draw' || (route() === 'admin' && state.tab === 'draw');
-  if (!onDraw || !audioUnlocked || !state.data) {
+  if (!onDraw || !audioUnlocked || !state.data || activeVideo()) {
     stopDrumroll();
     winnerAudio.pause();
     return;
@@ -107,6 +107,79 @@ function updateDrawSound() {
     winnerAudio.currentTime = Math.max(0, (now - celebrationAt) / 1000);
     winnerAudio.play().then(() => setSoundStatus('Playing winner fanfare.')).catch(audioFailure);
   }
+}
+
+function activeVideo() { return state.data?.video_playbacks?.find(v => !v.completed_at); }
+
+async function finishVideo(skip = false) {
+  const playback = activeVideo();
+  if (!playback || !state.session.admin) return;
+  if (skip && !confirm('Skip this video for everyone and return to the draw? This will be recorded in the audit trail.')) return;
+  await api(adminPath(`/videos/${playback.id}/finish`), 'POST', { skip, confirm: skip });
+  await refresh();
+}
+
+function syncVideo() {
+  const playback = activeVideo();
+  const onDraw = route() === 'draw' || (route() === 'admin' && state.tab === 'draw');
+  let layer = $('#video-overlay');
+  if (!playback || !onDraw) {
+    layer?.querySelector('video')?.pause();
+    layer?.remove();
+    return;
+  }
+  const info = state.data.videos.find(v => v.key === playback.video_key);
+  if (!info) return;
+  if (!layer || layer.dataset.playback !== playback.id) {
+    layer?.querySelector('video')?.pause();
+    layer?.remove();
+    layer = document.createElement('section');
+    layer.id = 'video-overlay';
+    layer.dataset.playback = playback.id;
+    layer.className = 'video-overlay';
+    layer.setAttribute('role', 'dialog');
+    layer.setAttribute('aria-modal', 'true');
+    layer.setAttribute('aria-label', info.title);
+    layer.innerHTML = `<div class="video-heading"><div><p class="eyebrow">Diwali wishes from our offshore team</p><h2>${escape(info.title)}</h2></div></div>
+      <video playsinline preload="auto" controls aria-label="${escape(info.title)}" src="${escape(info.src)}"></video>
+      <p class="video-status" role="status">Loading the greeting...</p><div class="actions">
+      <button class="secondary" data-action="video-retry">Play / resume with sound</button>
+      ${state.session.admin ? '<button class="secondary" data-action="video-finish" disabled>Return to draw</button><button class="secondary" data-action="video-skip">Skip video</button>' : ''}</div>`;
+    $('#app').append(layer);
+    const video = layer.querySelector('video');
+    const status = layer.querySelector('.video-status');
+    video.addEventListener('loadedmetadata', () => {
+      video.currentTime = Math.min(Math.max(0, (serverNow() - new Date(playback.started_at).getTime()) / 1000), Math.max(0, video.duration - .2));
+      playGreeting(video);
+    });
+    video.addEventListener('playing', () => { status.textContent = 'Playing Diwali wishes. Keep this screen open.'; });
+    video.addEventListener('waiting', () => { status.textContent = 'Buffering video. Please wait; the lottery will not start automatically.'; });
+    video.addEventListener('error', () => {
+      status.textContent = 'Video could not load. Use Play / resume to retry, or ask the coordinator to skip it.';
+    });
+    video.addEventListener('ended', () => {
+      status.textContent = 'Greeting complete. Waiting for the coordinator to return to the draw.';
+      if (state.session.admin) action(() => finishVideo());
+    });
+    layer.querySelector('[data-action="video-retry"]').focus();
+  }
+  const finish = layer.querySelector('[data-action="video-finish"]');
+  if (finish) finish.disabled = serverNow() < new Date(playback.started_at).getTime() + info.duration * 1000;
+  // Late audience screens catch up to the shared timeline, without restarting on each poll.
+  const video = layer.querySelector('video');
+  const elapsed = (serverNow() - new Date(playback.started_at).getTime()) / 1000;
+  if (!state.session.admin && video.readyState >= 2 && !video.paused && elapsed < info.duration && Math.abs(video.currentTime - elapsed) > 3) {
+    video.currentTime = Math.max(0, elapsed);
+  }
+}
+
+function playGreeting(video) {
+  video.play().catch(error => {
+    const status = $('#video-overlay .video-status');
+    if (status) status.textContent = error.name === 'NotAllowedError' ?
+      'Your browser needs a click for video sound. Select Play / resume with sound.' :
+      'Playback failed. Select Play / resume to retry, or ask the coordinator to skip.';
+  });
 }
 
 async function api(path, method = 'GET', body) {
@@ -300,12 +373,18 @@ function roundControls() {
   const shown = presentation ? rounds.slice(roundPage * 3, roundPage * 3 + 3) : rounds;
   const nextCount = next ? Math.min(next.batch_size || next.winner_count, next.winner_count - (next.awarded_count || 0)) : 0;
   const shortage = state.data.stats.eligible_employees < state.data.remaining;
+  const greetingKey = next ? `round-${next.position}` : 'credits';
+  const greeting = state.data.videos?.find(v => v.key === greetingKey);
+  const played = state.data.video_playbacks?.some(v => v.video_key === greetingKey && v.completed_at);
+  const needsGreeting = greeting && next?.rolls_completed === 0 && !played;
+  const videoPlaying = Boolean(activeVideo());
   return `<section class="card round-controls" id="round-controls"><p class="eyebrow">Planned rounds</p>
     <div class="round-grid">${shown.map(round => `<div class="round-summary"><div><strong>${escape(round.name)}</strong><p>${escape(round.prize_label)} &middot; ${round.winner_count} planned winner${round.winner_count === 1 ? '' : 's'}</p>
       <p>${round.awarded_count || 0}/${round.winner_count} awarded &middot; ${round.rolls_completed || 0}/${Math.ceil(round.winner_count / (round.batch_size || round.winner_count))} rolls${round.rolled_at && round.awarded_count < round.winner_count ? ` &middot; ${round.winner_count - round.awarded_count} unfilled` : ''}</p></div>
       ${badge(round.rolled_at ? batch?.active && round.batch_id === batch.id ? 'revealing' : 'complete' : next?.id === round.id ? 'next' : 'upcoming')}</div>`).join('')}</div>
     ${presentation && pages > 1 ? `<div class="presentation-pages"><button class="secondary" data-round-page="-1" ${roundPage === 0 ? 'disabled' : ''}>Previous rounds</button><span>${roundPage + 1} / ${pages}</span><button class="secondary" data-round-page="1" ${roundPage === pages - 1 ? 'disabled' : ''}>Next rounds</button></div>` : ''}
-    ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active ? 'disabled' : ''}>Roll ${escape(next.name)} &mdash; ${nextCount} winners (roll ${(next.rolls_completed || 0) + 1}/${Math.ceil(next.winner_count / (next.batch_size || next.winner_count))}) &rarr;</button>` : ''}
+    ${greeting && (next?.rolls_completed === 0 || !next) && state.session.admin ? `<button class="${needsGreeting || !next ? 'primary' : 'secondary'} full" type="button" data-play-video="${greetingKey}" ${event.status !== 'live' || batch?.active || videoPlaying ? 'disabled' : ''}>${next ? `${played ? 'Replay' : 'Play'} Round ${next.position} Greeting` : `${played ? 'Replay' : 'Play'} End Roll`}</button>` : ''}
+    ${next ? `${state.session.admin ? `<button class="primary full" type="button" data-roll-round="${next.id}" ${event.status !== 'live' || batch?.active || needsGreeting || videoPlaying ? 'disabled' : ''}>Roll ${escape(next.name)} &mdash; ${nextCount} winners (roll ${(next.rolls_completed || 0) + 1}/${Math.ceil(next.winner_count / (next.batch_size || next.winner_count))}) &rarr;</button>` : ''}
       <p class="helper">${batch?.active ? 'Watch this roll finish revealing before the next roll.' : event.status !== 'live' ? 'The coordinator will start the event soon.' : `Next: ${escape(next.name)}. ${state.session.admin ? 'The saved prize and winner count will be used automatically.' : 'Waiting for the coordinator to roll.'}`}</p>
       ${state.session.admin ? `<p class="readiness ${shortage ? 'shortage' : ''}">${state.data.stats.eligible_employees} eligible employees for ${state.data.remaining} remaining prizes.${shortage ? ' Approve more employees before rolling; shortages are recorded as unfilled.' : ' Ready to fill all prizes.'}</p>` : ''}` :
       `<p class="notice green">${batch?.active ? 'The final round is revealing.' : 'All rounds are complete.'}</p>`}
@@ -392,11 +471,16 @@ function renderAdmin() {
 
 function render() {
   const winnersScroll = $('.winner-grid')?.scrollTop || 0;
+  const videoLayer = $('#video-overlay');
   updateHeader();
   $('#app').classList.toggle('presentation', presentation);
   const page = route();
-  $('#app').innerHTML = page === 'employee' ? renderEmployee() : page === 'admin' ? renderAdmin() : page === 'draw' ? renderDraw() : renderHome();
+  const content = document.createElement('template');
+  content.innerHTML = page === 'employee' ? renderEmployee() : page === 'admin' ? renderAdmin() : page === 'draw' ? renderDraw() : renderHome();
+  [...$('#app').childNodes].filter(node => node !== videoLayer).forEach(node => node.remove());
+  $('#app').insertBefore(content.content, videoLayer);
   if ($('.winner-grid')) $('.winner-grid').scrollTop = winnersScroll;
+  syncVideo();
 }
 
 async function refresh() {
@@ -472,7 +556,18 @@ document.addEventListener('click', event => {
   }
   const button = event.target.closest('button');
   if (!button || button.disabled) return;
-  if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
+  if (button.dataset.action === 'video-retry') {
+    const video = $('#video-overlay video');
+    if (video.error) video.load();
+    playGreeting(video);
+  }
+  else if (button.dataset.action === 'video-skip') action(() => finishVideo(true));
+  else if (button.dataset.action === 'video-finish') action(() => finishVideo());
+  else if (button.dataset.playVideo) action(async () => {
+    await api(adminPath('/videos/play'), 'POST', { key: button.dataset.playVideo });
+    await refresh();
+  });
+  else if (button.dataset.tab) { state.tab = button.dataset.tab; render(); }
   else if (button.dataset.auth) { state.authTab = button.dataset.auth; render(); }
   else if (button.dataset.person) { state.personId = Number(button.dataset.person); render(); }
   else if (button.dataset.roundPage) { roundPage += Number(button.dataset.roundPage); render(); }
@@ -567,6 +662,7 @@ async function initialize() {
 }
 
 setInterval(() => {
+  syncVideo();
   updateDrawSound();
   const activeReveal = $('[data-reveal]');
   const activeDraw = state.data?.draws.find(draw => String(draw.id) === activeReveal?.dataset.reveal);

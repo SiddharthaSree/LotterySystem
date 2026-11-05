@@ -205,6 +205,14 @@ td .small { display: block; font-size: 11px; color: var(--muted); }
 .toast.error { background: #9c2c3c; }
 footer { border-top: 1px solid #dfb36066; padding: 23px 5%; display: flex; justify-content: space-between; gap: 20px; font-size: 10px; color: #e6cce3; }
 footer a { color: var(--gold); font-weight: 600; }
+.video-overlay { position: fixed; inset: 0; z-index: 50; background: #16071ff5; color: #fffaf0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; overflow-y: auto; }
+.video-overlay .video-heading { width: min(1100px, 100%); }
+.video-overlay h2 { font-size: clamp(18px, 3vw, 28px); margin: 0; }
+.video-overlay .eyebrow { margin-bottom: 5px; }
+.video-overlay video { display: block; width: min(1100px, 100%); min-height: 0; max-height: 70dvh; object-fit: contain; background: #000; border: 1px solid #d5b77b; border-radius: 8px; }
+.video-status { font-size: 13px; margin: 0; text-align: center; }
+.video-overlay .actions { justify-content: center; }
+.round-controls [data-play-video] { margin-bottom: 8px; }
 .audit-details { max-width: 420px; overflow-wrap: anywhere; font: 11px Consolas, monospace; }
 main:fullscreen { background: radial-gradient(ellipse at top, #650e76, #260534); max-width: none; width: 100%; }
 @keyframes spin { to { transform: rotate(360deg); } }

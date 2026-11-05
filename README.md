@@ -41,6 +41,18 @@ The demo uses embedded PostgreSQL in `.demo-data` and binds only to localhost. D
 
 ## November 5 celebration plan
 
+### Offshore team video greetings
+
+The main event uses three greetings before each round's **first** roll and a separate **Play End Roll** button after the last winner has been revealed. Files in `public/videos/` are the supplied MP4s, with web-friendly filenames. They retain their original audio and aspect ratio.
+
+Enter Presentation mode before starting. Click **Play Round 1 Greeting**, let it finish, then click **Roll** when ready. Subsequent batches of the same round do not repeat the greeting. Repeat for rounds 2 and 3. After the final reveal, click **Play End Roll** for the credits. A finished greeting can be replayed before its first roll. No video starts a lottery roll automatically.
+
+Playback appears as a large overlay on admin and public draw screens, using a shared server start time. Late/reloaded audience screens seek to the current position; buffering and polling mean synchronization is approximate, not frame-perfect. Audio from the drumroll/fanfare is paused while video is active. Browsers may require **Play / resume with sound** on each audience device. Use only one unmuted device in the room to avoid echo. Greetings total about four minutes; credits add about one minute.
+
+The admin browser signals completion when its video ends. If it disconnects, reopen the draw and resume, or use **Return to draw** after the scheduled duration. The server blocks premature completion and any roll while a video is active. **Skip video** requires confirmation and is audited for all viewers; loading/buffering/autoplay problems are shown explicitly. Native video controls allow pausing and volume adjustment; audience screens catch up to the shared timeline. Do not pause on a remote screen expecting every device to pause.
+
+Schema initialization creates playback tracking but does not enable videos for unrelated events. After deployment, `node --env-file=.env.neon scripts/enable-draw-videos.js --apply` enables greetings only for the main November 5 event with three unstarted rounds. It preserves employees, allocations, prize plans, status, and results and never starts a video or draw. Test on a database branch first.
+
 The owner-approved plan has 25 unique winners and six coordinator-triggered rolls:
 
 | Round | Voucher | Winners | Rolls |

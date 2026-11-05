@@ -112,3 +112,13 @@ UPDATE draws d SET round_id=r.id FROM rounds r WHERE d.round_id IS NULL AND d.ev
 UPDATE rounds SET rolls_completed=1 WHERE rolled_at IS NOT NULL AND rolls_completed=0;
 CREATE INDEX IF NOT EXISTS tickets_person ON tickets(person_id);
 CREATE INDEX IF NOT EXISTS people_event ON people(event_id);
+ALTER TABLE events ADD COLUMN IF NOT EXISTS videos_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS video_playbacks (
+  id UUID PRIMARY KEY,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  video_key TEXT NOT NULL CHECK (video_key IN ('round-1','round-2','round-3','credits')),
+  started_at TIMESTAMPTZ NOT NULL,
+  completed_at TIMESTAMPTZ,
+  skipped BOOLEAN NOT NULL DEFAULT FALSE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_video ON video_playbacks(event_id) WHERE completed_at IS NULL;
